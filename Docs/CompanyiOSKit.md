@@ -105,8 +105,76 @@ try await session.logout()
 
 ---
 
-## 4. Extension Guidelines
+## 5. Multi-Language Support (Swift, SwiftUI & Objective-C)
+
+`CompanyiOSKit` supports iOS 15+ across all Apple programming models:
+
+### 5.1 Objective-C Integration (`@import CompanyiOSKit;`)
+
+Objective-C projects can use dedicated `@objc` compatible classes:
+
+```objc
+@import CompanyiOSKit;
+
+// 1. Input Validation
+NSString *errorMsg = [CompanyObjcValidator emailValidationError:@"invalid-email"];
+BOOL isValidEmail = [CompanyObjcValidator validateEmail:@"user@company.com"];
+
+// 2. Secure Keychain Storage
+NSError *error = nil;
+[CompanyObjcKeychainManager.shared saveWithString:@"secure_token_123" forKey:@"auth_token" error:&error];
+NSString *token = [CompanyObjcKeychainManager.shared readStringForKey:@"auth_token"];
+
+// 3. API Client
+[CompanyObjcAPIClient.shared executeRequestWithPath:@"/profile" method:@"GET" body:nil completion:^(NSData *data, NSInteger statusCode, NSError *error) {
+    if (statusCode == 200) {
+        NSLog(@"Received data");
+    }
+}];
+
+// 4. Logging with Auto-Redaction
+[CompanyObjcLogger.shared logInfo:@"User token is Bearer eyJhbGci..."];
+// Sensitive token is automatically redacted in system logs!
+```
+
+### 5.2 SwiftUI Integration (iOS 15+)
+
+```swift
+import SwiftUI
+import CompanyiOSKit
+
+struct ContentView: View {
+    @State private var isLoading = false
+
+    var body: some View {
+        VStack(spacing: 20) {
+            if isLoading {
+                LoadingIndicatorView(message: "Fetching devices...")
+            } else {
+                EmptyStateView(
+                    title: "No Devices Found",
+                    message: "Tap below to scan for nearby appliances.",
+                    systemImageName: "antenna.radiowaves.left.and.right",
+                    actionTitle: "Scan Now"
+                ) {
+                    isLoading = true
+                }
+            }
+
+            PrimaryActionButton(title: "Connect", isLoading: isLoading) {
+                // Action
+            }
+        }
+        .padding()
+    }
+}
+```
+
+---
+
+## 6. Extension Guidelines
 
 1. **Maintain Zero Domain Coupling:** Never introduce calling-, device-, or IoT-specific models into `CompanyiOSKit`.
 2. **Swift 6 Strict Concurrency:** Every public type must be `Sendable` or an `actor`.
 3. **Protocol First:** Always expose protocols (`APIClientProtocol`, `StorageProtocol`, `LoggerProtocol`) so host applications and tests can supply mocks.
+4. **Objective-C Interoperability:** When adding a new capability, expose an `@objc` bridge wrapper in `ObjectiveCBridge/` so legacy Objective-C codebases can consume it.

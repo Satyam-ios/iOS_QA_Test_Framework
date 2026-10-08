@@ -47,15 +47,15 @@ High. Protocol-driven dependency injection across all services (`APIClientProtoc
 
 ### Tests:
 
-* **Unit:** 26
+* **Unit:** 30 (including 4 Objective-C interoperability suite tests)
 * **API:** 7
 * **Integration:** 6
-* **UI:** Accessible component harness verified
-* **E2E:** End-to-end authentication, session, and retry pipelines verified
-* **Regression:** 0 regressions detected
+* **Journey / E2E:** 7 (including multi-screen JourneyRunner validation & discovery tests)
+* **UI & Accessibility:** Automated component & accessibility identifier validation
+* **Regression:** 3 Learned defect catalog invariants verified
 
-* **Total:** 39
-* **Passed:** 39
+* **Total:** 50
+* **Passed:** 50
 * **Failed:** 0
 * **Skipped:** 0
 * **Blocked:** 0

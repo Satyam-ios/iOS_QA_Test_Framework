@@ -68,19 +68,27 @@ final class AuthenticationTests: XCTestCase {
         XCTAssertNil(tokenRemaining)
     }
 
+    private actor EventCounter {
+        var count = 0
+        func increment() { count += 1 }
+        func getCount() -> Int { count }
+    }
+
     func testSessionManager_WhenStateChanges_NotifiesObservers() async throws {
         let tokenManager = MockTokenManager()
         let sessionManager = SessionManager(tokenManager: tokenManager)
 
-        let expectation = expectation(description: "Observer called on state change")
-        expectation.expectedFulfillmentCount = 2 // 1 initial + 1 on change
+        let counter = EventCounter()
 
-        let observerId = await sessionManager.addObserver { state in
-            expectation.fulfill()
+        let observerId = await sessionManager.addObserver { _ in
+            Task { await counter.increment() }
         }
 
         await sessionManager.setAuthenticated(userId: "user_async")
-        await fulfillment(of: [expectation], timeout: 2.0)
+
+        try await AsyncTestHelpers.waitUntil(timeout: 2.0) {
+            await counter.getCount() >= 2
+        }
 
         await sessionManager.removeObserver(id: observerId)
     }

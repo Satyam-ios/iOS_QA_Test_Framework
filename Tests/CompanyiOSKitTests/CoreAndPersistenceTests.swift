@@ -1,5 +1,6 @@
 import XCTest
 @testable import CompanyiOSKit
+@testable import CompanyTestKit
 
 final class CoreAndPersistenceTests: XCTestCase {
 
@@ -46,21 +47,29 @@ final class CoreAndPersistenceTests: XCTestCase {
         XCTAssertFalse(clearedVal)
     }
 
-    func testAppLifecycleCoordinator_WhenTransitionOccurs_NotifiesListeners() async {
-        let coordinator = AppLifecycleCoordinator(initialState: .active)
-        let expectation = expectation(description: "Lifecycle transition triggered")
+    private actor LifecycleStateBox {
+        var state: AppLifecycleState = .inactive
+        func setState(_ s: AppLifecycleState) { state = s }
+        func getState() -> AppLifecycleState { state }
+    }
 
-        let _ = await coordinator.addObserver { state in
-            if state == .background {
-                expectation.fulfill()
-            }
+    func testAppLifecycleCoordinator_WhenTransitionOccurs_NotifiesListeners() async throws {
+        let coordinator = AppLifecycleCoordinator(initialState: .active)
+        let box = LifecycleStateBox()
+
+        let id = await coordinator.addObserver { state in
+            Task { await box.setState(state) }
         }
 
         await coordinator.transition(to: .background)
-        await fulfillment(of: [expectation], timeout: 1.0)
+
+        try await AsyncTestHelpers.waitUntil(timeout: 1.0) {
+            await box.getState() == .background
+        }
 
         let current = await coordinator.currentState
         XCTAssertEqual(current, .background)
+        await coordinator.removeObserver(id: id)
     }
 
     func testErrorMapper_WhenURLErrorTimedOut_MapsToTimeoutAppError() {

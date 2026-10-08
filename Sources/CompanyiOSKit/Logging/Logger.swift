@@ -15,6 +15,18 @@ public protocol LoggerProtocol: Sendable {
 }
 
 public extension LoggerProtocol {
+    func log(
+        _ message: @autoclosure () -> String,
+        level: LogLevel,
+        category: String = "App",
+        file: String = #file,
+        function: String = #function,
+        line: Int = #line
+    ) {
+        log(message(), level: level, category: category, file: file, function: function, line: line)
+    }
+
+
     func verbose(_ message: @autoclosure () -> String, category: String = "App", file: String = #file, function: String = #function, line: Int = #line) {
         log(message(), level: .verbose, category: category, file: file, function: function, line: line)
     }
@@ -71,10 +83,10 @@ public final class AppLogger: LoggerProtocol, @unchecked Sendable {
     public func log(
         _ message: @autoclosure () -> String,
         level: LogLevel,
-        category: String,
-        file: String,
-        function: String,
-        line: Int
+        category: String = "App",
+        file: String = #file,
+        function: String = #function,
+        line: Int = #line
     ) {
         guard level >= minimumLogLevel, level != .none else { return }
 

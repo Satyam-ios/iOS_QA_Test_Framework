@@ -47,6 +47,71 @@ public final class ScreenRegistry: @unchecked Sendable {
         journeys[journey.id] = journey
     }
 
+    /// Records a screen observed dynamically at runtime.
+    public func recordRuntimeScreen(
+        name: String,
+        route: String,
+        viewClass: String? = nil,
+        elements: [UIElementDescriptor] = []
+    ) {
+        lock.lock()
+        defer { lock.unlock() }
+
+        let screenId = "runtime_\(route.replacingOccurrences(of: "/", with: "_").trimmingCharacters(in: CharacterSet(charactersIn: "_")))"
+        if var existing = screens[screenId] {
+            existing.discoverySource = .runtimeObservation
+            if let vc = viewClass { existing.viewClassName = vc }
+            if !elements.isEmpty { existing.elements = elements }
+            screens[screenId] = existing
+        } else {
+            let screen = ScreenDefinition(
+                id: screenId,
+                name: name,
+                route: route,
+                elements: elements,
+                discoverySource: .runtimeObservation,
+                viewClassName: viewClass
+            )
+            screens[screenId] = screen
+        }
+    }
+
+    /// Merges screens discovered via static source code analysis.
+    public func recordDiscoveredScreen(fromStaticAnalysis screen: ScreenDefinition) {
+        lock.lock()
+        defer { lock.unlock() }
+        screens[screen.id] = screen
+    }
+
+    /// Bulk registers screens discovered via static analysis.
+    public func registerDiscoveredScreens(_ discovered: [ScreenDefinition]) {
+        lock.lock()
+        defer { lock.unlock() }
+        for screen in discovered {
+            screens[screen.id] = screen
+        }
+    }
+
+    /// Updates aggregated test execution metrics for a specific screen.
+    public func updateTestMetrics(forScreenId id: String, metrics: ScreenTestMetrics) {
+        lock.lock()
+        defer { lock.unlock() }
+        guard var screen = screens[id] else { return }
+        screen.testMetrics = metrics
+        screens[id] = screen
+    }
+
+    /// Links a defect identifier to a screen record.
+    public func linkDefect(id defectId: String, toScreenId screenId: String) {
+        lock.lock()
+        defer { lock.unlock() }
+        guard var screen = screens[screenId] else { return }
+        if !screen.linkedDefectIds.contains(defectId) {
+            screen.linkedDefectIds.append(defectId)
+        }
+        screens[screenId] = screen
+    }
+
     public var allScreens: [ScreenDefinition] {
         lock.lock()
         defer { lock.unlock() }
@@ -88,7 +153,13 @@ public final class ScreenRegistry: @unchecked Sendable {
             availableStates: [.normal, .loading, .error(message: "Invalid credentials")],
             supportedActions: [
                 UserActionDescriptor(id: "act_login", name: "Submit Login", targetElementId: "btn_submit", targetRoute: "/home")
-            ]
+            ],
+            sourceFile: "Sources/Authentication/LoginViewController.swift",
+            sourceLine: 35,
+            featureModule: "Auth",
+            discoverySource: .staticSourceAnalysis,
+            testMetrics: ScreenTestMetrics(generatedCount: 4, executedCount: 4, passedCount: 4, failedCount: 0, blockedCount: 0, notExecutedCount: 0),
+            viewClassName: "LoginViewController"
         )
 
         let homeScreen = ScreenDefinition(
@@ -105,7 +176,13 @@ public final class ScreenRegistry: @unchecked Sendable {
             supportedActions: [
                 UserActionDescriptor(id: "act_goto_profile", name: "Navigate to Profile", targetElementId: "btn_profile", targetRoute: "/profile"),
                 UserActionDescriptor(id: "act_goto_contacts", name: "Navigate to Contacts", targetElementId: "btn_contacts", targetRoute: "/contacts")
-            ]
+            ],
+            sourceFile: "Sources/Dashboard/HomeDashboardViewController.swift",
+            sourceLine: 42,
+            featureModule: "Dashboard",
+            discoverySource: .staticSourceAnalysis,
+            testMetrics: ScreenTestMetrics(generatedCount: 3, executedCount: 3, passedCount: 3, failedCount: 0, blockedCount: 0, notExecutedCount: 0),
+            viewClassName: "HomeDashboardViewController"
         )
 
         let profileScreen = ScreenDefinition(
@@ -120,7 +197,13 @@ public final class ScreenRegistry: @unchecked Sendable {
             availableStates: [.normal, .loading, .error(message: "Update failed")],
             supportedActions: [
                 UserActionDescriptor(id: "act_save", name: "Save Profile", targetElementId: "btn_save_profile")
-            ]
+            ],
+            sourceFile: "Sources/Profile/UserProfileViewController.swift",
+            sourceLine: 28,
+            featureModule: "Profile",
+            discoverySource: .staticSourceAnalysis,
+            testMetrics: ScreenTestMetrics(generatedCount: 2, executedCount: 2, passedCount: 2, failedCount: 0, blockedCount: 0, notExecutedCount: 0),
+            viewClassName: "UserProfileViewController"
         )
 
         let contactsScreen = ScreenDefinition(
@@ -133,7 +216,13 @@ public final class ScreenRegistry: @unchecked Sendable {
             ],
             apiDependencies: ["/api/v1/contacts"],
             availableStates: [.normal, .loading, .empty],
-            supportedActions: []
+            supportedActions: [],
+            sourceFile: "Sources/Contacts/ContactsListViewController.swift",
+            sourceLine: 19,
+            featureModule: "Contacts",
+            discoverySource: .staticSourceAnalysis,
+            testMetrics: ScreenTestMetrics(generatedCount: 2, executedCount: 2, passedCount: 2, failedCount: 0, blockedCount: 0, notExecutedCount: 0),
+            viewClassName: "ContactsListViewController"
         )
 
         screens[loginScreen.id] = loginScreen

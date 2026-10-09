@@ -55,7 +55,7 @@ public struct UserJourney: Codable, Sendable, Equatable {
     }
 }
 
-/// Result of an individual step execution.
+/// Result of an individual step execution with checkpoint tracing.
 public struct StepResult: Codable, Sendable, Equatable {
     public let stepNumber: Int
     public let screenId: String
@@ -63,6 +63,10 @@ public struct StepResult: Codable, Sendable, Equatable {
     public let isSuccessful: Bool
     public let failureReason: String?
     public let duration: TimeInterval
+    public let apiCallTriggered: String?
+    public let targetElementId: String?
+    public let expectedRoute: String?
+    public let checkpointTimestamp: Date
 
     public init(
         stepNumber: Int,
@@ -70,7 +74,11 @@ public struct StepResult: Codable, Sendable, Equatable {
         actionName: String,
         isSuccessful: Bool,
         failureReason: String? = nil,
-        duration: TimeInterval = 0.001
+        duration: TimeInterval = 0.001,
+        apiCallTriggered: String? = nil,
+        targetElementId: String? = nil,
+        expectedRoute: String? = nil,
+        checkpointTimestamp: Date = Date()
     ) {
         self.stepNumber = stepNumber
         self.screenId = screenId
@@ -78,6 +86,10 @@ public struct StepResult: Codable, Sendable, Equatable {
         self.isSuccessful = isSuccessful
         self.failureReason = failureReason
         self.duration = duration
+        self.apiCallTriggered = apiCallTriggered
+        self.targetElementId = targetElementId
+        self.expectedRoute = expectedRoute
+        self.checkpointTimestamp = checkpointTimestamp
     }
 }
 
@@ -92,6 +104,7 @@ public struct JourneyExecutionResult: Codable, Sendable, Equatable {
     public let failureReason: String?
     public let duration: TimeInterval
     public let stepResults: [StepResult]
+    public let synthesizedDefectId: String?
 
     public init(
         journeyId: String,
@@ -102,7 +115,8 @@ public struct JourneyExecutionResult: Codable, Sendable, Equatable {
         failedStepNumber: Int? = nil,
         failureReason: String? = nil,
         duration: TimeInterval,
-        stepResults: [StepResult] = []
+        stepResults: [StepResult] = [],
+        synthesizedDefectId: String? = nil
     ) {
         self.journeyId = journeyId
         self.name = name
@@ -113,5 +127,6 @@ public struct JourneyExecutionResult: Codable, Sendable, Equatable {
         self.failureReason = failureReason
         self.duration = duration
         self.stepResults = stepResults
+        self.synthesizedDefectId = synthesizedDefectId
     }
 }

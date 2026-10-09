@@ -14,8 +14,11 @@ public actor JourneyRunner {
         registeredScreens[screen.id] = screen
     }
 
-    /// Executes an end-to-end journey step-by-step.
-    public func execute(journey: UserJourney) async -> JourneyExecutionResult {
+    /// Executes an end-to-end journey step-by-step with checkpoint tracing and automated defect synthesis.
+    public func execute(
+        journey: UserJourney,
+        recordDefectOnFailure: Bool = true
+    ) async -> JourneyExecutionResult {
         let startTime = Date()
         var stepResults: [StepResult] = []
 
@@ -28,19 +31,20 @@ public actor JourneyRunner {
                     actionName: step.actionName,
                     isSuccessful: false,
                     failureReason: "Screen '\(step.screenId)' is not registered or reachable.",
-                    duration: Date().timeIntervalSince(stepStart)
+                    duration: Date().timeIntervalSince(stepStart),
+                    apiCallTriggered: step.apiCallTriggered,
+                    targetElementId: step.targetElementId,
+                    expectedRoute: step.expectedRoute,
+                    checkpointTimestamp: Date()
                 )
                 stepResults.append(failResult)
-                return JourneyExecutionResult(
-                    journeyId: journey.id,
-                    name: journey.name,
-                    isSuccessful: false,
-                    executedSteps: stepResults.count,
-                    totalSteps: journey.steps.count,
-                    failedStepNumber: step.stepNumber,
-                    failureReason: failResult.failureReason,
-                    duration: Date().timeIntervalSince(startTime),
-                    stepResults: stepResults
+                return handleFailure(
+                    journey: journey,
+                    failedStep: step,
+                    failResult: failResult,
+                    stepResults: stepResults,
+                    startTime: startTime,
+                    recordDefect: recordDefectOnFailure
                 )
             }
 
@@ -53,19 +57,20 @@ public actor JourneyRunner {
                         actionName: step.actionName,
                         isSuccessful: false,
                         failureReason: "Element '\(elementId)' was not found on screen '\(screen.name)'.",
-                        duration: Date().timeIntervalSince(stepStart)
+                        duration: Date().timeIntervalSince(stepStart),
+                        apiCallTriggered: step.apiCallTriggered,
+                        targetElementId: step.targetElementId,
+                        expectedRoute: step.expectedRoute,
+                        checkpointTimestamp: Date()
                     )
                     stepResults.append(failResult)
-                    return JourneyExecutionResult(
-                        journeyId: journey.id,
-                        name: journey.name,
-                        isSuccessful: false,
-                        executedSteps: stepResults.count,
-                        totalSteps: journey.steps.count,
-                        failedStepNumber: step.stepNumber,
-                        failureReason: failResult.failureReason,
-                        duration: Date().timeIntervalSince(startTime),
-                        stepResults: stepResults
+                    return handleFailure(
+                        journey: journey,
+                        failedStep: step,
+                        failResult: failResult,
+                        stepResults: stepResults,
+                        startTime: startTime,
+                        recordDefect: recordDefectOnFailure
                     )
                 }
 
@@ -76,19 +81,20 @@ public actor JourneyRunner {
                         actionName: step.actionName,
                         isSuccessful: false,
                         failureReason: "Element '\(elementId)' is hidden on screen '\(screen.name)'.",
-                        duration: Date().timeIntervalSince(stepStart)
+                        duration: Date().timeIntervalSince(stepStart),
+                        apiCallTriggered: step.apiCallTriggered,
+                        targetElementId: step.targetElementId,
+                        expectedRoute: step.expectedRoute,
+                        checkpointTimestamp: Date()
                     )
                     stepResults.append(failResult)
-                    return JourneyExecutionResult(
-                        journeyId: journey.id,
-                        name: journey.name,
-                        isSuccessful: false,
-                        executedSteps: stepResults.count,
-                        totalSteps: journey.steps.count,
-                        failedStepNumber: step.stepNumber,
-                        failureReason: failResult.failureReason,
-                        duration: Date().timeIntervalSince(startTime),
-                        stepResults: stepResults
+                    return handleFailure(
+                        journey: journey,
+                        failedStep: step,
+                        failResult: failResult,
+                        stepResults: stepResults,
+                        startTime: startTime,
+                        recordDefect: recordDefectOnFailure
                     )
                 }
 
@@ -99,19 +105,20 @@ public actor JourneyRunner {
                         actionName: step.actionName,
                         isSuccessful: false,
                         failureReason: "Element '\(elementId)' is disabled on screen '\(screen.name)'.",
-                        duration: Date().timeIntervalSince(stepStart)
+                        duration: Date().timeIntervalSince(stepStart),
+                        apiCallTriggered: step.apiCallTriggered,
+                        targetElementId: step.targetElementId,
+                        expectedRoute: step.expectedRoute,
+                        checkpointTimestamp: Date()
                     )
                     stepResults.append(failResult)
-                    return JourneyExecutionResult(
-                        journeyId: journey.id,
-                        name: journey.name,
-                        isSuccessful: false,
-                        executedSteps: stepResults.count,
-                        totalSteps: journey.steps.count,
-                        failedStepNumber: step.stepNumber,
-                        failureReason: failResult.failureReason,
-                        duration: Date().timeIntervalSince(startTime),
-                        stepResults: stepResults
+                    return handleFailure(
+                        journey: journey,
+                        failedStep: step,
+                        failResult: failResult,
+                        stepResults: stepResults,
+                        startTime: startTime,
+                        recordDefect: recordDefectOnFailure
                     )
                 }
             }
@@ -121,7 +128,11 @@ public actor JourneyRunner {
                 screenId: step.screenId,
                 actionName: step.actionName,
                 isSuccessful: true,
-                duration: Date().timeIntervalSince(stepStart)
+                duration: Date().timeIntervalSince(stepStart),
+                apiCallTriggered: step.apiCallTriggered,
+                targetElementId: step.targetElementId,
+                expectedRoute: step.expectedRoute,
+                checkpointTimestamp: Date()
             )
             stepResults.append(successResult)
         }
@@ -134,6 +145,52 @@ public actor JourneyRunner {
             totalSteps: journey.steps.count,
             duration: Date().timeIntervalSince(startTime),
             stepResults: stepResults
+        )
+    }
+
+    private func handleFailure(
+        journey: UserJourney,
+        failedStep: JourneyStep,
+        failResult: StepResult,
+        stepResults: [StepResult],
+        startTime: Date,
+        recordDefect: Bool
+    ) -> JourneyExecutionResult {
+        var defectId: String? = nil
+        if recordDefect {
+            let id = "DEF-JOURNEY-\(UUID().uuidString.prefix(6))"
+            let defect = DefectRecord(
+                id: id,
+                title: "Journey '\(journey.name)' failed at step \(failedStep.stepNumber): \(failedStep.actionName)",
+                affectedScreen: failedStep.screenId,
+                rootCause: failResult.failureReason ?? "Unknown step failure",
+                regressionPattern: "JourneyStepFailure_\(failedStep.screenId)",
+                riskLevel: .high,
+                reproductionSteps: journey.steps.prefix(failedStep.stepNumber).map {
+                    "Step \($0.stepNumber): Screen '\($0.screenId)' -> \($0.actionName)"
+                },
+                verifiedFixed: false,
+                status: .new,
+                severity: .high,
+                category: .functional,
+                expectedBehavior: "Step completes successfully",
+                actualBehavior: failResult.failureReason
+            )
+            DefectCatalog.shared.recordDefect(defect)
+            defectId = id
+        }
+
+        return JourneyExecutionResult(
+            journeyId: journey.id,
+            name: journey.name,
+            isSuccessful: false,
+            executedSteps: stepResults.count,
+            totalSteps: journey.steps.count,
+            failedStepNumber: failedStep.stepNumber,
+            failureReason: failResult.failureReason,
+            duration: Date().timeIntervalSince(startTime),
+            stepResults: stepResults,
+            synthesizedDefectId: defectId
         )
     }
 }

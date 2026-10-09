@@ -82,6 +82,40 @@ public struct UserActionDescriptor: Codable, Sendable, Equatable, Hashable {
     }
 }
 
+/// Origin of screen discovery.
+public enum ScreenDiscoverySource: String, Codable, Sendable {
+    case explicitRegistration = "Explicit Registration"
+    case staticSourceAnalysis = "Static Source Analysis"
+    case runtimeObservation = "Runtime Observation"
+    case dynamicInferred = "Dynamic Inferred"
+}
+
+/// Aggregated test execution counts for an individual screen.
+public struct ScreenTestMetrics: Codable, Sendable, Equatable, Hashable {
+    public var generatedCount: Int
+    public var executedCount: Int
+    public var passedCount: Int
+    public var failedCount: Int
+    public var blockedCount: Int
+    public var notExecutedCount: Int
+
+    public init(
+        generatedCount: Int = 0,
+        executedCount: Int = 0,
+        passedCount: Int = 0,
+        failedCount: Int = 0,
+        blockedCount: Int = 0,
+        notExecutedCount: Int = 0
+    ) {
+        self.generatedCount = generatedCount
+        self.executedCount = executedCount
+        self.passedCount = passedCount
+        self.failedCount = failedCount
+        self.blockedCount = blockedCount
+        self.notExecutedCount = notExecutedCount
+    }
+}
+
 /// Complete structural model of an application screen.
 public struct ScreenDefinition: Codable, Sendable, Equatable, Hashable {
     public let id: String
@@ -92,6 +126,18 @@ public struct ScreenDefinition: Codable, Sendable, Equatable, Hashable {
     public var availableStates: [ScreenStateKind]
     public var supportedActions: [UserActionDescriptor]
 
+    // Discovery and Architecture Metadata
+    public var sourceFile: String?
+    public var sourceLine: Int?
+    public var featureModule: String?
+    public var discoverySource: ScreenDiscoverySource
+    public var linkedPermissions: [String]
+    public var linkedDefectIds: [String]
+    public var testMetrics: ScreenTestMetrics
+    public var securityFindingsCount: Int
+    public var runtimeIssuesCount: Int
+    public var viewClassName: String?
+
     public init(
         id: String,
         name: String,
@@ -99,7 +145,17 @@ public struct ScreenDefinition: Codable, Sendable, Equatable, Hashable {
         elements: [UIElementDescriptor] = [],
         apiDependencies: [String] = [],
         availableStates: [ScreenStateKind] = [.normal],
-        supportedActions: [UserActionDescriptor] = []
+        supportedActions: [UserActionDescriptor] = [],
+        sourceFile: String? = nil,
+        sourceLine: Int? = nil,
+        featureModule: String? = nil,
+        discoverySource: ScreenDiscoverySource = .explicitRegistration,
+        linkedPermissions: [String] = [],
+        linkedDefectIds: [String] = [],
+        testMetrics: ScreenTestMetrics = ScreenTestMetrics(),
+        securityFindingsCount: Int = 0,
+        runtimeIssuesCount: Int = 0,
+        viewClassName: String? = nil
     ) {
         self.id = id
         self.name = name
@@ -108,5 +164,15 @@ public struct ScreenDefinition: Codable, Sendable, Equatable, Hashable {
         self.apiDependencies = apiDependencies
         self.availableStates = availableStates
         self.supportedActions = supportedActions
+        self.sourceFile = sourceFile
+        self.sourceLine = sourceLine
+        self.featureModule = featureModule
+        self.discoverySource = discoverySource
+        self.linkedPermissions = linkedPermissions
+        self.linkedDefectIds = linkedDefectIds
+        self.testMetrics = testMetrics
+        self.securityFindingsCount = securityFindingsCount
+        self.runtimeIssuesCount = runtimeIssuesCount
+        self.viewClassName = viewClassName
     }
 }

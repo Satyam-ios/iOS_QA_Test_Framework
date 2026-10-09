@@ -7,10 +7,20 @@ public struct InAppTestCenterView: View {
     @State private var journeys: [UserJourney] = ScreenRegistry.shared.allJourneys
     @State private var generatedPlan: GeneratedTestPlan?
     @State private var defects: [DefectRecord] = DefectCatalog.shared.allDefects
-    @State private var qualityReport: QualityReport?
+    @State private var comprehensiveEvaluation: ComprehensiveQualityEvaluation?
     @State private var selectedTab: Int = 0
     @State private var isExecuting: Bool = false
     @State private var executionStatusMessage: String = "Ready to test."
+
+    // Security & Simulation State
+    @State private var securityFindings: [SecurityFinding] = []
+    @State private var isOfflineSimulated: Bool = false
+    @State private var isHighLatencySimulated: Bool = false
+    @State private var isServer500Simulated: Bool = false
+
+    // Navigation & Sheet State
+    @State private var selectedScreen: ScreenDefinition?
+    @State private var showDeleteConfirmation: Bool = false
 
     public init() {}
 
@@ -41,9 +51,10 @@ public struct InAppTestCenterView: View {
                 Picker("Section", selection: $selectedTab) {
                     Text("Screens (\(screens.count))").tag(0)
                     Text("Journeys (\(journeys.count))").tag(1)
-                    Text("Generated").tag(2)
-                    Text("Regression (\(defects.count))").tag(3)
-                    Text("Quality Gate").tag(4)
+                    Text("Tests").tag(2)
+                    Text("Security").tag(3)
+                    Text("Simulation").tag(4)
+                    Text("Quality Gate").tag(5)
                 }
                 .pickerStyle(SegmentedPickerStyle())
                 .padding(.horizontal)
@@ -54,8 +65,9 @@ public struct InAppTestCenterView: View {
                     screensListView.tag(0)
                     journeysListView.tag(1)
                     generatedTestsView.tag(2)
-                    regressionCatalogView.tag(3)
-                    qualityGateView.tag(4)
+                    securityAndComplianceView.tag(3)
+                    simulationControlView.tag(4)
+                    qualityGateView.tag(5)
                 }
                 #if os(iOS)
                 .tabViewStyle(PageTabViewStyle(indexDisplayMode: .never))
@@ -86,6 +98,20 @@ public struct InAppTestCenterView: View {
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
+            .sheet(item: $selectedScreen) { screen in
+                ScreenDetailSheetView(screen: screen)
+            }
+            .confirmationDialog("Delete Generated Tests?", isPresented: $showDeleteConfirmation, titleVisibility: .visible) {
+                Button("Delete Generated Only (Keep Regressions)") {
+                    performDelete(scope: .generatedOnly)
+                }
+                Button("Delete All in Plan (Preserve Regressions)", role: .destructive) {
+                    performDelete(scope: .all)
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Regression tests derived from historical defects are protected by safety invariants and will not be erased.")
+            }
         }
     }
 
@@ -93,23 +119,37 @@ public struct InAppTestCenterView: View {
 
     private var screensListView: some View {
         List(screens, id: \.id) { screen in
-            VStack(alignment: .leading, spacing: 6) {
-                HStack {
-                    Text(screen.name)
-                        .font(.headline)
-                    Spacer()
-                    Text(screen.route)
-                        .font(.caption)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(Color.blue.opacity(0.1))
-                        .cornerRadius(4)
+            Button(action: { selectedScreen = screen }) {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        Text(screen.name)
+                            .font(.headline)
+                            .foregroundColor(.primary)
+                        Spacer()
+                        Text(screen.route)
+                            .font(.caption)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color.blue.opacity(0.1))
+                            .cornerRadius(4)
+                    }
+                    if let file = screen.sourceFile {
+                        Text("📍 \(file)\(screen.sourceLine != nil ? ":\(screen.sourceLine!)" : "")")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
+                    HStack {
+                        Text("\(screen.elements.count) elements • \(screen.apiDependencies.count) APIs")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        Spacer()
+                        Text("Source: \(screen.discoverySource.rawValue)")
+                            .font(.caption2)
+                            .foregroundColor(.purple)
+                    }
                 }
-                Text("\(screen.elements.count) elements • \(screen.apiDependencies.count) API dependencies")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                .padding(.vertical, 4)
             }
-            .padding(.vertical, 4)
         }
     }
 
@@ -132,30 +172,45 @@ public struct InAppTestCenterView: View {
     private var generatedTestsView: some View {
         Group {
             if let plan = generatedPlan {
-                List(plan.testCases, id: \.id) { tc in
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack {
-                            Text(tc.title)
-                                .font(.subheadline)
-                                .fontWeight(.semibold)
-                            Spacer()
-                            Text(tc.category.rawValue)
-                                .font(.caption2)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
-                                .background(Color.green.opacity(0.1))
-                                .cornerRadius(4)
-                        }
-                        Text(tc.intent)
+                VStack(spacing: 0) {
+                    HStack {
+                        Text("Total: \(plan.totalCount) (Regressions: \(plan.regressionTests.count))")
                             .font(.caption)
                             .foregroundColor(.secondary)
+                        Spacer()
+                        Button(role: .destructive, action: { showDeleteConfirmation = true }) {
+                            Label("Manage / Delete", systemImage: "trash")
+                                .font(.caption)
+                        }
                     }
-                    .padding(.vertical, 2)
+                    .padding(.horizontal)
+                    .padding(.vertical, 6)
+
+                    List(plan.testCases, id: \.id) { tc in
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack {
+                                Text(tc.title)
+                                    .font(.subheadline)
+                                    .fontWeight(.semibold)
+                                Spacer()
+                                Text(tc.category.rawValue)
+                                    .font(.caption2)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(tc.category == .regression ? Color.purple.opacity(0.1) : Color.green.opacity(0.1))
+                                    .cornerRadius(4)
+                            }
+                            Text(tc.intent)
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        .padding(.vertical, 2)
+                    }
                 }
             } else {
                 EmptyStateView(
                     title: "No Tests Generated Yet",
-                    message: "Tap 'Discover & Generate' to automatically synthesize tests for all screens and user journeys.",
+                    message: "Tap 'Discover & Generate' to synthesize tests across all screens and user journeys.",
                     systemImageName: "doc.badge.gearshape",
                     actionTitle: "Generate Now"
                 ) {
@@ -165,63 +220,152 @@ public struct InAppTestCenterView: View {
         }
     }
 
-    private var regressionCatalogView: some View {
-        List(defects, id: \.id) { defect in
-            VStack(alignment: .leading, spacing: 6) {
-                HStack {
-                    Text(defect.id)
-                        .font(.caption)
-                        .fontWeight(.bold)
-                        .padding(.horizontal, 6)
+    private var securityAndComplianceView: some View {
+        List {
+            Section(header: Text("Security Findings (\(securityFindings.count))")) {
+                if securityFindings.isEmpty {
+                    Text("✅ No static security vulnerabilities detected.")
+                        .font(.subheadline)
+                        .foregroundColor(.green)
+                } else {
+                    ForEach(securityFindings, id: \.id) { finding in
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack {
+                                Text(finding.category.rawValue)
+                                    .font(.subheadline)
+                                    .fontWeight(.bold)
+                                Spacer()
+                                Text(finding.severity.rawValue)
+                                    .font(.caption2)
+                                    .padding(4)
+                                    .background(Color.red.opacity(0.1))
+                                    .cornerRadius(4)
+                            }
+                            Text(finding.evidence)
+                                .font(.system(.caption, design: .monospaced))
+                            Text("💡 \(finding.recommendation)")
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                        }
                         .padding(.vertical, 2)
-                        .background(Color.red.opacity(0.1))
-                        .cornerRadius(4)
-                    Text(defect.title)
-                        .font(.headline)
+                    }
                 }
-                Text("Root Cause: \(defect.rootCause)")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                Text("Invariant: \(defect.regressionPattern)")
-                    .font(.caption2)
-                    .foregroundColor(.blue)
             }
-            .padding(.vertical, 4)
+        }
+    }
+
+    private var simulationControlView: some View {
+        Form {
+            Section(header: Text("Network Fault Injection")) {
+                Toggle("Simulate Offline Mode", isOn: $isOfflineSimulated)
+                    .onChange(of: isOfflineSimulated) { val in
+                        updateFaultScenario()
+                    }
+                Toggle("Simulate High Latency (2.5s)", isOn: $isHighLatencySimulated)
+                    .onChange(of: isHighLatencySimulated) { val in
+                        updateFaultScenario()
+                    }
+                Toggle("Simulate HTTP 500 Server Error", isOn: $isServer500Simulated)
+                    .onChange(of: isServer500Simulated) { val in
+                        updateFaultScenario()
+                    }
+            }
+
+            Section(header: Text("Diagnostics & Hardware Status")) {
+                HStack {
+                    Text("Execution Environment")
+                    Spacer()
+                    Text(RuntimeDiagnosticsMonitor.shared.isSimulator ? "Simulator" : "Physical Device")
+                        .foregroundColor(.secondary)
+                }
+                HStack {
+                    Text("Current Memory")
+                    Spacer()
+                    Text(String(format: "%.1f MB", RuntimeDiagnosticsMonitor.shared.captureSnapshot().memoryUsageMegabytes))
+                        .foregroundColor(.secondary)
+                }
+            }
         }
     }
 
     private var qualityGateView: some View {
         Group {
-            if let report = qualityReport {
-                VStack(spacing: 16) {
-                    Image(systemName: report.releaseStatus == .releaseReady ? "checkmark.seal.fill" : "xmark.seal.fill")
-                        .font(.system(size: 64))
-                        .foregroundColor(report.releaseStatus == .releaseReady ? .green : .red)
-
-                    Text(report.releaseStatus.rawValue)
-                        .font(.title)
-                        .fontWeight(.bold)
-
-                    Text("Total Tests: \(report.totalTests) | Passed: \(report.passedTests) | Failed: \(report.failedTests)")
-                        .font(.subheadline)
-
-                    if report.releaseStatus == .releaseReady {
-                        Text("QA HANDOFF APPROVED: Build passes all 12 quality criteria.")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    } else {
-                        List(report.blockingReasons, id: \.self) { reason in
-                            Text("⚠️ \(reason)")
+            if let eval = comprehensiveEvaluation {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        // 1. Technical Quality
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("1. TECHNICAL QUALITY REPORT")
                                 .font(.caption)
-                                .foregroundColor(.red)
+                                .fontWeight(.bold)
+                                .foregroundColor(.secondary)
+                            HStack {
+                                Text(eval.technicalQuality.isTechnicallyPassing ? "PASSED" : "FAILED")
+                                    .font(.title2)
+                                    .fontWeight(.bold)
+                                    .foregroundColor(eval.technicalQuality.isTechnicallyPassing ? .green : .red)
+                                Spacer()
+                                Text(String(format: "Pass Rate: %.1f%%", eval.technicalQuality.passRatePercentage))
+                                    .font(.subheadline)
+                            }
+                            Text("Executed: \(eval.technicalQuality.totalExecuted) | Passed: \(eval.technicalQuality.passedCount) | Failed: \(eval.technicalQuality.failedCount)")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
                         }
+                        .padding()
+                        .background(Color.secondary.opacity(0.08))
+                        .cornerRadius(8)
+
+                        // 2. QA Handoff Decision
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("2. QA HANDOFF DECISION")
+                                .font(.caption)
+                                .fontWeight(.bold)
+                                .foregroundColor(.secondary)
+                            Text(eval.qaHandoff.status.rawValue)
+                                .font(.title3)
+                                .fontWeight(.bold)
+                                .foregroundColor(eval.qaHandoff.status == .approvedForQA ? .green : (eval.qaHandoff.status == .approvedWithCaveats ? .orange : .red))
+
+                            if !eval.qaHandoff.knownRisksDisclosed.isEmpty {
+                                Text("Known Risks Disclosed: \(eval.qaHandoff.knownRisksDisclosed.joined(separator: ", "))")
+                                    .font(.caption2)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                        .padding()
+                        .background(Color.secondary.opacity(0.08))
+                        .cornerRadius(8)
+
+                        // 3. Release Readiness Decision
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("3. PRODUCTION RELEASE GATE")
+                                .font(.caption)
+                                .fontWeight(.bold)
+                                .foregroundColor(.secondary)
+                            Text(eval.releaseReadiness.status.rawValue)
+                                .font(.title3)
+                                .fontWeight(.bold)
+                                .foregroundColor(eval.releaseReadiness.status == .releaseReady ? .green : .red)
+
+                            if eval.releaseReadiness.status == .releaseBlocked {
+                                ForEach(eval.releaseReadiness.blockingReasons, id: \.self) { reason in
+                                    Text("🚫 \(reason)")
+                                        .font(.caption)
+                                        .foregroundColor(.red)
+                                }
+                            }
+                        }
+                        .padding()
+                        .background(Color.secondary.opacity(0.08))
+                        .cornerRadius(8)
                     }
+                    .padding()
                 }
-                .padding()
             } else {
                 EmptyStateView(
                     title: "Quality Gate Unchecked",
-                    message: "Tap 'Run Quality Gate' to evaluate full release readiness.",
+                    message: "Tap 'Run Quality Gate' to evaluate comprehensive 3-tier release readiness.",
                     systemImageName: "shield.lefthalf.filled",
                     actionTitle: "Evaluate Now"
                 ) {
@@ -247,12 +391,28 @@ public struct InAppTestCenterView: View {
         }
     }
 
+    private func performDelete(scope: DeletionScope) {
+        guard let plan = generatedPlan else { return }
+        let engine = TestGenerationEngine()
+        let result = engine.deleteTestCases(from: plan, inScope: scope, preserveRegressionCases: true)
+        self.generatedPlan = result.updatedPlan
+        self.executionStatusMessage = "Deleted \(result.deletedCount) test cases. Preserved \(result.preservedRegressionCount) regression invariant tests."
+    }
+
+    private func updateFaultScenario() {
+        let scenario = NetworkFaultScenario(
+            simulatedLatency: isHighLatencySimulated ? 2.5 : 0.0,
+            simulatedStatusCode: isServer500Simulated ? 500 : nil,
+            isSimulatingOffline: isOfflineSimulated
+        )
+        NetworkSimulationEngine.shared.setScenario(scenario)
+    }
+
     private func runFullQualityEvaluation() {
         isExecuting = true
-        executionStatusMessage = "Evaluating Release Quality Gate..."
+        executionStatusMessage = "Evaluating 3-Tier Release Quality Gate..."
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-            let evaluator = QualityGateEvaluator()
             let sampleResults = [
                 TestCaseResult(name: "Standard_User_Journey", suite: "JourneyTests", category: .e2e, status: .passed, duration: 0.05),
                 TestCaseResult(name: "Profile_Save_UI_Refresh", suite: "RegressionTests", category: .regression, status: .passed, duration: 0.01),
@@ -260,10 +420,105 @@ public struct InAppTestCenterView: View {
                 TestCaseResult(name: "Accessibility_Identifier_Compliance", suite: "A11yTests", category: .ui, status: .passed, duration: 0.01),
                 TestCaseResult(name: "Offline_Banner_Display", suite: "APITests", category: .api, status: .passed, duration: 0.02)
             ]
-            self.qualityReport = evaluator.evaluate(results: sampleResults, projectName: "iOS_QA_Framework")
-            self.selectedTab = 4
+            let evaluation = QualityGateEvaluator.evaluateComprehensive(
+                results: sampleResults,
+                defects: DefectCatalog.shared.allDefects
+            )
+            self.comprehensiveEvaluation = evaluation
+            self.selectedTab = 5
             self.isExecuting = false
-            self.executionStatusMessage = "Quality Gate Evaluated: \(self.qualityReport?.releaseStatus.rawValue ?? "")"
+            self.executionStatusMessage = "Evaluated: \(evaluation.releaseReadiness.status.rawValue)"
         }
     }
 }
+
+/// Rich screen inspection sheet displaying controls, APIs, permissions, and test metrics.
+public struct ScreenDetailSheetView: View {
+    public let screen: ScreenDefinition
+    @Environment(\.presentationMode) var presentationMode
+
+    public init(screen: ScreenDefinition) {
+        self.screen = screen
+    }
+
+    public var body: some View {
+        NavigationView {
+            List {
+                Section(header: Text("Architecture Overview")) {
+                    HStack {
+                        Text("Route")
+                        Spacer()
+                        Text(screen.route).foregroundColor(.secondary)
+                    }
+                    if let vc = screen.viewClassName {
+                        HStack {
+                            Text("View Class")
+                            Spacer()
+                            Text(vc).foregroundColor(.secondary)
+                        }
+                    }
+                    if let source = screen.sourceFile {
+                        HStack {
+                            Text("Source File")
+                            Spacer()
+                            Text("\(source)\(screen.sourceLine != nil ? ":\(screen.sourceLine!)" : "")")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    HStack {
+                        Text("Discovery Source")
+                        Spacer()
+                        Text(screen.discoverySource.rawValue).foregroundColor(.purple)
+                    }
+                }
+
+                Section(header: Text("Test Execution Metrics")) {
+                    HStack {
+                        Text("Generated Tests")
+                        Spacer()
+                        Text("\(screen.testMetrics.generatedCount)")
+                    }
+                    HStack {
+                        Text("Passed")
+                        Spacer()
+                        Text("\(screen.testMetrics.passedCount)").foregroundColor(.green)
+                    }
+                    HStack {
+                        Text("Failed")
+                        Spacer()
+                        Text("\(screen.testMetrics.failedCount)").foregroundColor(.red)
+                    }
+                }
+
+                Section(header: Text("UI Elements (\(screen.elements.count))")) {
+                    ForEach(screen.elements, id: \.id) { el in
+                        HStack {
+                            Text(el.id).font(.subheadline)
+                            Spacer()
+                            Text(el.type.rawValue).font(.caption).foregroundColor(.secondary)
+                        }
+                    }
+                }
+
+                Section(header: Text("API Dependencies (\(screen.apiDependencies.count))")) {
+                    ForEach(screen.apiDependencies, id: \.self) { api in
+                        Text(api).font(.system(.caption, design: .monospaced))
+                    }
+                }
+            }
+            .navigationTitle(screen.name)
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .toolbar {
+                Button("Done") {
+                    presentationMode.wrappedValue.dismiss()
+                }
+            }
+        }
+    }
+}
+
+// Ensure ScreenDefinition conforms to Identifiable for sheets
+extension ScreenDefinition: Identifiable {}

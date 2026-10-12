@@ -63,6 +63,11 @@ public struct ArchitecturalAuditReport: Codable, Sendable, Equatable {
 public struct ArchitecturalAntiPatternAuditor: Sendable {
     public init() {}
 
+    /// Instant baseline report used for zero-latency initial UI presentation without blocking disk reads.
+    public static func baselineReport() -> ArchitecturalAuditReport {
+        ArchitecturalAntiPatternAuditor().fallbackBaselineReport()
+    }
+
     /// Audits project source files at the given directory.
     public func auditProject(directoryURL: URL? = nil) -> ArchitecturalAuditReport {
         let baseDir = directoryURL ?? URL(fileURLWithPath: FileManager.default.currentDirectoryPath)

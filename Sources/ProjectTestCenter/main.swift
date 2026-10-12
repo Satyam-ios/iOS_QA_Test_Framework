@@ -30,6 +30,8 @@ struct ProjectTestCenterCLI {
             runAppleComplianceCheck(path: targetPath)
         case "verify-release":
             runReleaseIsolationVerification(path: targetPath)
+        case "audit":
+            runSeniorProjectAudit(path: targetPath)
         case "gate":
             runQualityGateEvaluation()
         case "report":
@@ -289,12 +291,32 @@ struct ProjectTestCenterCLI {
         print("\n>>> MASTER PIPELINE COMPLETE: VERIFIED PRODUCTION BUILD <<<")
     }
 
+    static func runSeniorProjectAudit(path: String) {
+        print("\n[PHASE 10: SENIOR QA COMPLETE PROJECT AUDIT]")
+        let url = URL(fileURLWithPath: path)
+        let auditor = SeniorProjectAuditor()
+        let report = auditor.auditProject(directoryURL: url)
+
+        print("  • Application: \(report.appName) (\(report.bundleId))")
+        print("  • Maintainability Score: \(report.maintainability.finalScore)/100 [\(report.maintainability.grade.rawValue)]")
+        print("  • Screens Audited: \(report.screenAudits.count)")
+        print("  • Security Findings: \(report.securityAudit.findings.count)")
+        print("  • App Store Compliance: \(report.complianceAudit.status.rawValue)")
+        print("  • Runtime Telemetry Events: \(report.totalRuntimeEventsRecorded)")
+
+        print("\n  Category Statuses:")
+        for (cat, status) in report.categoryStatuses.sorted(by: { $0.key < $1.key }) {
+            print("    - \(cat): \(status.rawValue)")
+        }
+    }
+
     static func printUsage() {
         print("""
         Usage: ProjectTestCenter <command> [path] [options]
 
         Commands:
           quality          (Default) Execute entire automated end-to-end pipeline
+          audit [path]     Run complete 10-section Senior QA evidence-based project audit
           analyze [path]   Deep static source-code analysis for UI, routes, APIs, and hazards
           discover [path]  Discover screens, user journeys, and API endpoints
           generate         Synthesize automated functional & UI test cases

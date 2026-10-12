@@ -4,6 +4,12 @@ import XCTest
 
 final class JourneyAndDiscoveryTests: XCTestCase {
 
+    override func setUp() {
+        super.setUp()
+        ScreenRegistry.shared.seedSampleFixtures()
+        DefectCatalog.shared.seedSampleDefects()
+    }
+
     func testJourneyRunner_WhenValidJourneyExecuted_CompletesAllStepsSuccessfully() async {
         let runner = JourneyRunner(screens: ScreenRegistry.shared.allScreens)
         let journey = ScreenRegistry.shared.allJourneys.first!

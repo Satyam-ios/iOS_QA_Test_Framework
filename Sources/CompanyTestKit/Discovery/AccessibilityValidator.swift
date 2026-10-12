@@ -57,6 +57,17 @@ public struct AccessibilityValidator: Sendable {
             default:
                 break
             }
+
+            // Text truncation / ellipsis clipping hazard check (e.g., 'Sat...' instead of 'Satyam')
+            if element.isTruncated || element.textContent?.hasSuffix("...") == true || element.textContent?.hasSuffix("…") == true {
+                let displayed = element.textContent ?? "Unknown"
+                violations.append(AccessibilityViolation(
+                    elementId: element.id,
+                    screenName: screen.name,
+                    issueType: "Text Truncation / Ellipsis Clipping Hazard",
+                    recommendation: "Label '\(element.id)' displays truncated text '\(displayed)' due to insufficient width constraints. Adjust AutoLayout constraints, enable adjustsFontSizeToFitWidth, or set numberOfLines = 0."
+                ))
+            }
         }
 
         return violations

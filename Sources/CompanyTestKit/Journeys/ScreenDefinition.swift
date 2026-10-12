@@ -25,6 +25,7 @@ public struct UIElementDescriptor: Codable, Sendable, Equatable, Hashable {
     public var isEnabled: Bool
     public var isVisible: Bool
     public var textContent: String?
+    public var isTruncated: Bool
 
     public init(
         id: String,
@@ -33,7 +34,8 @@ public struct UIElementDescriptor: Codable, Sendable, Equatable, Hashable {
         accessibilityLabel: String? = nil,
         isEnabled: Bool = true,
         isVisible: Bool = true,
-        textContent: String? = nil
+        textContent: String? = nil,
+        isTruncated: Bool = false
     ) {
         self.id = id
         self.type = type
@@ -42,6 +44,7 @@ public struct UIElementDescriptor: Codable, Sendable, Equatable, Hashable {
         self.isEnabled = isEnabled
         self.isVisible = isVisible
         self.textContent = textContent
+        self.isTruncated = isTruncated
     }
 }
 
@@ -117,7 +120,7 @@ public struct ScreenTestMetrics: Codable, Sendable, Equatable, Hashable {
 }
 
 /// Complete structural model of an application screen.
-public struct ScreenDefinition: Codable, Sendable, Equatable, Hashable {
+public struct ScreenDefinition: Codable, Sendable, Equatable, Hashable, Identifiable {
     public let id: String
     public let name: String
     public let route: String

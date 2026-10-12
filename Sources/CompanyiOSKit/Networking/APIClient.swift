@@ -48,6 +48,15 @@ public final class APIClient: APIClientProtocol, Sendable {
             )
         } catch let decodeError {
             logger.error("Failed to decode response: \(decodeError)")
+            NotificationCenter.default.post(
+                name: .companyAPIDidFailDecoding,
+                object: nil,
+                userInfo: [
+                    "path": request.path,
+                    "targetType": String(describing: T.self),
+                    "error": decodeError
+                ]
+            )
             throw NetworkError.decodingFailed(reason: decodeError.localizedDescription)
         }
     }
@@ -128,4 +137,9 @@ public final class APIClient: APIClientProtocol, Sendable {
             throw NetworkError.unknown(reason: "HTTP \(code)")
         }
     }
+}
+
+public extension Notification.Name {
+    static let companyAPIDidCompleteRequest = Notification.Name("CompanyiOSKit.APIDidCompleteRequest")
+    static let companyAPIDidFailDecoding = Notification.Name("CompanyiOSKit.APIDidFailDecoding")
 }

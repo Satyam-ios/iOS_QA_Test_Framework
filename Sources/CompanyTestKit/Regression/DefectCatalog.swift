@@ -46,7 +46,7 @@ public enum DefectCategory: String, Codable, Sendable, CaseIterable {
 }
 
 /// Comprehensive record of a defect preserving historical intelligence, evidence, and regression invariants.
-public struct DefectRecord: Codable, Sendable, Equatable {
+public struct DefectRecord: Codable, Sendable, Equatable, Identifiable {
     public let id: String
     public let title: String
     public let affectedScreen: String
@@ -140,7 +140,7 @@ public final class DefectCatalog: @unchecked Sendable {
     private var defects: [String: DefectRecord] = [:]
 
     private init() {
-        populateBaselineDefects()
+        // Starts empty by default. Only records real defects captured at runtime or by auditor.
     }
 
     /// Records or updates a defect in the catalog.
@@ -252,11 +252,17 @@ public final class DefectCatalog: @unchecked Sendable {
         }
     }
 
-    /// Resets catalog to baseline known invariants.
+    /// Resets catalog to empty state.
     public func reset() {
         lock.lock()
         defer { lock.unlock() }
         defects.removeAll()
+    }
+
+    /// Explicitly loads sample defect records for unit test fixtures.
+    public func seedSampleDefects() {
+        lock.lock()
+        defer { lock.unlock() }
         populateBaselineDefects()
     }
 

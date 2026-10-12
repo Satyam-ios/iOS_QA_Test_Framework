@@ -8,7 +8,8 @@ final class PackageConsumerIntegrationTests: XCTestCase {
 
     override func setUp() {
         super.setUp()
-        ScreenRegistry.shared.reset()
+        ScreenRegistry.shared.seedSampleFixtures()
+        DefectCatalog.shared.seedSampleDefects()
     }
 
     // MARK: - 1. One-Line Onboarding Facade Tests

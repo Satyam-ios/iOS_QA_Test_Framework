@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(UIKit) && !os(watchOS)
+import UIKit
+#endif
 
 /// Central registry managing discovered and developer-registered application screens and journeys.
 public final class ScreenRegistry: @unchecked Sendable {
@@ -9,7 +12,7 @@ public final class ScreenRegistry: @unchecked Sendable {
     private var journeys: [String: UserJourney] = [:]
 
     private init() {
-        populateDefaultDiscoveredLandscape()
+        // Starts clean by default: only real screens registered or dynamically observed appear.
     }
 
     /// Registers a screen definition into the test discovery engine.
@@ -26,7 +29,9 @@ public final class ScreenRegistry: @unchecked Sendable {
         route: String,
         elements: [UIElementDescriptor] = [],
         apiDependencies: [String] = [],
-        supportedActions: [UserActionDescriptor] = []
+        supportedActions: [UserActionDescriptor] = [],
+        sourceFile: String? = nil,
+        viewClassName: String? = nil
     ) {
         let screen = ScreenDefinition(
             id: id,
@@ -35,7 +40,9 @@ public final class ScreenRegistry: @unchecked Sendable {
             elements: elements,
             apiDependencies: apiDependencies,
             availableStates: [.normal, .loading, .empty, .error(message: "Failed to load")],
-            supportedActions: supportedActions
+            supportedActions: supportedActions,
+            sourceFile: sourceFile,
+            viewClassName: viewClassName
         )
         register(screen)
     }
@@ -115,8 +122,137 @@ public final class ScreenRegistry: @unchecked Sendable {
     public var allScreens: [ScreenDefinition] {
         lock.lock()
         defer { lock.unlock() }
+        #if canImport(UIKit) && !os(watchOS)
+        if screens.isEmpty && Thread.isMainThread {
+            lock.unlock()
+            discoverRunningScreens()
+            lock.lock()
+        }
+        #endif
         return Array(screens.values).sorted { $0.name < $1.name }
     }
+
+    #if canImport(UIKit) && !os(watchOS)
+    /// Discovers screens dynamically from the live UIKit window and view controller hierarchy.
+    @MainActor
+    public func discoverRunningScreens() {
+        let scenes = UIApplication.shared.connectedScenes
+        guard let windowScene = scenes.compactMap({ $0 as? UIWindowScene }).first(where: { $0.activationState == .foregroundActive }),
+              let keyWindow = windowScene.windows.first(where: { $0.isKeyWindow }),
+              let rootVC = keyWindow.rootViewController else {
+            return
+        }
+
+        lock.lock()
+        defer { lock.unlock() }
+        discoverFromViewController(rootVC)
+    }
+
+    @MainActor
+    private func discoverFromViewController(_ vc: UIViewController) {
+        let className = String(describing: type(of: vc))
+        let ignoredSubstrings = ["UIHostingController", "UIInputWindowController", "UINavigationController", "UITabBarController", "UIAlertController"]
+        let isIgnored = ignoredSubstrings.contains { className.contains($0) }
+
+        if !isIgnored {
+            let screenName = formatScreenName(from: className)
+            let route = "/" + className.lowercased()
+                .replacingOccurrences(of: "viewcontroller", with: "")
+                .replacingOccurrences(of: "vc", with: "")
+            let screenId = "screen_\(className.lowercased())"
+
+            if screens[screenId] == nil {
+                let elements = inspectViewElements(in: vc.view)
+                let screen = ScreenDefinition(
+                    id: screenId,
+                    name: screenName,
+                    route: route.isEmpty ? "/root" : route,
+                    elements: elements,
+                    availableStates: [.normal, .loading, .error(message: "Failed to load")],
+                    discoverySource: .runtimeObservation,
+                    viewClassName: className
+                )
+                screens[screenId] = screen
+            }
+        }
+
+        for child in vc.children {
+            discoverFromViewController(child)
+        }
+
+        if let presented = vc.presentedViewController {
+            discoverFromViewController(presented)
+        }
+    }
+
+    private func formatScreenName(from className: String) -> String {
+        var clean = className
+        if clean.hasSuffix("ViewController") {
+            clean = String(clean.dropLast("ViewController".count))
+        } else if clean.hasSuffix("VC") {
+            clean = String(clean.dropLast("VC".count))
+        }
+
+        var result = ""
+        for char in clean {
+            if char.isUppercase && !result.isEmpty {
+                result.append(" ")
+            }
+            result.append(char)
+        }
+        return result.isEmpty ? className : result
+    }
+
+    @MainActor
+    private func inspectViewElements(in view: UIView) -> [UIElementDescriptor] {
+        var elements: [UIElementDescriptor] = []
+        var queue: [UIView] = [view]
+
+        while !queue.isEmpty && elements.count < 40 {
+            let current = queue.removeFirst()
+            var type: UIElementType?
+            if current is UIButton {
+                type = .button
+            } else if current is UITextField {
+                type = .textField
+            } else if current is UISwitch {
+                type = .toggle
+            } else if current is UITableView || current is UICollectionView {
+                type = .list
+            } else if current is UILabel {
+                type = .label
+            }
+
+            if let elType = type {
+                let id = current.accessibilityIdentifier ?? "\(elType.rawValue)_\(elements.count + 1)"
+                let text = (current as? UILabel)?.text ?? (current as? UIButton)?.currentTitle ?? (current as? UITextField)?.text
+                let label = current.accessibilityLabel ?? text
+
+                var isTruncated = false
+                if let lbl = current as? UILabel, let txt = lbl.text {
+                    let hasEllipsis = txt.hasSuffix("...") || txt.hasSuffix("…")
+                    let targetSize = CGSize(width: CGFloat.greatestFiniteMagnitude, height: lbl.bounds.height > 0 ? lbl.bounds.height : 30)
+                    let requiredWidth = lbl.sizeThatFits(targetSize).width
+                    let isClipped = lbl.bounds.width > 0 && requiredWidth > lbl.bounds.width + 1.0
+                    isTruncated = hasEllipsis || isClipped
+                }
+
+                elements.append(UIElementDescriptor(
+                    id: id,
+                    type: elType,
+                    accessibilityIdentifier: current.accessibilityIdentifier,
+                    accessibilityLabel: label,
+                    textContent: text,
+                    isTruncated: isTruncated
+                ))
+            }
+
+            queue.append(contentsOf: current.subviews)
+        }
+
+        return elements
+    }
+    #endif
 
     public var allJourneys: [UserJourney] {
         lock.lock()
@@ -135,7 +271,24 @@ public final class ScreenRegistry: @unchecked Sendable {
         defer { lock.unlock() }
         screens.removeAll()
         journeys.removeAll()
+    }
+
+    /// Explicitly loads sample screens and journeys for test fixtures or demonstration.
+    public func seedSampleFixtures() {
+        lock.lock()
+        defer { lock.unlock() }
         populateDefaultDiscoveredLandscape()
+    }
+
+    /// Clears any default sample fixtures so that only real discovered screens from the host app remain.
+    public func clearSampleFixtures() {
+        lock.lock()
+        defer { lock.unlock() }
+        let sampleIds = ["screen_login", "screen_home", "screen_profile", "screen_contacts"]
+        for sid in sampleIds {
+            screens.removeValue(forKey: sid)
+        }
+        journeys.removeValue(forKey: "journey_standard_flow")
     }
 
     /// Automatic fallback discovery ensuring zero-config out-of-the-box support for standard iOS journeys.

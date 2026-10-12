@@ -93,14 +93,9 @@ public final class CompanyTestCenter: @unchecked Sendable {
         // 5. Discover runtime screens from active view hierarchy
         #if canImport(UIKit) && !os(watchOS)
         if configuration.autoDiscoverScreens {
-            if Thread.isMainThread {
+            Task { @MainActor in
                 _ = LiveScreenAuditEngine.shared.auditActiveWindow()
                 ScreenRegistry.shared.discoverRunningScreens()
-            } else {
-                DispatchQueue.main.async {
-                    _ = LiveScreenAuditEngine.shared.auditActiveWindow()
-                    ScreenRegistry.shared.discoverRunningScreens()
-                }
             }
         }
         #endif

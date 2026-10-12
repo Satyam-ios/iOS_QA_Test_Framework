@@ -28,6 +28,7 @@ public enum RuntimeEventCategory: String, Codable, Sendable, CaseIterable {
     case permissionFailure = "PERMISSION_FAILURE"
     case lifecycleTransition = "LIFECYCLE_TRANSITION"
     case repeatedFailurePattern = "REPEATED_FAILURE_PATTERN"
+    case ui = "UI"
 }
 
 /// Structured record of an observable runtime occurrence.

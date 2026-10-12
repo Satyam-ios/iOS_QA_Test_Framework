@@ -122,13 +122,6 @@ public final class ScreenRegistry: @unchecked Sendable {
     public var allScreens: [ScreenDefinition] {
         lock.lock()
         defer { lock.unlock() }
-        #if canImport(UIKit) && !os(watchOS)
-        if screens.isEmpty && Thread.isMainThread {
-            lock.unlock()
-            discoverRunningScreens()
-            lock.lock()
-        }
-        #endif
         return Array(screens.values).sorted { $0.name < $1.name }
     }
 

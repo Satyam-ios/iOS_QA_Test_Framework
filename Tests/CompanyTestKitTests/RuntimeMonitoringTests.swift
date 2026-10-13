@@ -266,4 +266,20 @@ final class RuntimeMonitoringTests: XCTestCase {
         XCTAssertEqual(store.allResults.count, 1)
         XCTAssertEqual(store.allResults.first?.name, "Test_Authentication_Flow")
     }
+
+    // MARK: - 10. InAppTestCenterView Loader & UX Tests
+
+    func testInAppTestCenterView_InstantiatesWithLoaderAndSections() {
+        let view = InAppTestCenterView()
+        XCTAssertNotNil(view)
+
+        // Verify active audit sections
+        let sections = InAppTestCenterView.ActiveAuditSection.allCases
+        XCTAssertEqual(sections.count, 7)
+        XCTAssertTrue(sections.contains(.defects))
+        XCTAssertTrue(sections.contains(.screens))
+        XCTAssertTrue(sections.contains(.antiHacking))
+        XCTAssertTrue(sections.contains(.architecture))
+    }
 }
+

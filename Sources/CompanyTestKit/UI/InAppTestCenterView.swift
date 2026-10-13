@@ -15,6 +15,13 @@ public struct InAppTestCenterView: View {
     @State private var architecturalReport: ArchitecturalAuditReport = ArchitecturalAntiPatternAuditor.baselineReport()
     @State private var screenAudits: [String: ScreenSeniorQualityReport] = [:]
 
+    // Loading & UX Enhancement States
+    @State private var isLoading: Bool = true
+    @State private var loadingStageMessage: String = "Please wait, we are fetching the report data..."
+    @State private var loadingProgress: Double = 0.15
+    @State private var showCopiedToast: Bool = false
+    @State private var searchQuery: String = ""
+
     // Navigation State (Card-based navigation replacing cramped segmented picker)
     @State private var activeSection: ActiveAuditSection? = nil
     @State private var selectedScreen: ScreenDefinition? = nil
@@ -22,7 +29,7 @@ public struct InAppTestCenterView: View {
     @State private var isExecuting: Bool = false
     @State private var executionStatusMessage: String = "Auditing live application..."
 
-    public enum ActiveAuditSection: String, Identifiable {
+    public enum ActiveAuditSection: String, Identifiable, CaseIterable {
         case defects = "Bugs & Defect Tracker"
         case screens = "Covered Screens & UI/UX"
         case antiHacking = "Anti-Hacking & Security Shield"
@@ -38,179 +45,36 @@ public struct InAppTestCenterView: View {
 
     public var body: some View {
         NavigationView {
-            List {
-                // 1. Hero Project Quality & App Header
-                Section {
-                    VStack(alignment: .leading, spacing: 10) {
-                        HStack {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(reportTitle)
-                                    .font(.title2)
-                                    .fontWeight(.bold)
-                                Text("Bundle: \(bundleIdentifier) • v\(appVersion)")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                            }
-                            Spacer()
-                            VStack(alignment: .trailing, spacing: 2) {
-                                Text("\(String(format: "%.1f", qualityScore))%")
-                                    .font(.system(size: 28, weight: .bold, design: .rounded))
-                                    .foregroundColor(qualityScore >= 90 ? .green : (qualityScore >= 75 ? .orange : .red))
-                                Text(qualityGrade)
-                                    .font(.caption2)
-                                    .fontWeight(.bold)
-                                    .foregroundColor(.secondary)
-                            }
-                        }
+            ZStack {
+                if isLoading {
+                    loadingView
+                        .transition(.opacity)
+                } else {
+                    mainContentView
+                        .transition(.opacity)
+                }
 
-                        Divider()
-
-                        // Status alert
+                // Floating Toast Banner
+                if showCopiedToast {
+                    VStack {
                         HStack(spacing: 8) {
-                            Image(systemName: defects.isEmpty ? "checkmark.seal.fill" : "exclamationmark.triangle.fill")
-                                .foregroundColor(defects.isEmpty ? .green : .red)
-                            Text(defects.isEmpty ? "All Systems Clean • 0 Active Bugs" : "\(defects.count) Active Issue(s) Detected (Click below)")
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundColor(.green)
+                            Text("QA Report Summary Copied to Clipboard! 📋")
                                 .font(.caption)
                                 .fontWeight(.semibold)
-                                .foregroundColor(defects.isEmpty ? .primary : .red)
-                            Spacer()
-                            Text("\(screens.count) Screens")
-                                .font(.caption2)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
-                                .background(Color.blue.opacity(0.1))
-                                .cornerRadius(4)
+                                .foregroundColor(.white)
                         }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                        .background(Color.black.opacity(0.85))
+                        .cornerRadius(22)
+                        .shadow(radius: 6)
+                        .padding(.top, 12)
+                        Spacer()
                     }
-                    .padding(.vertical, 4)
-                }
-
-                // 2. Active Bug Alert Card (Highlighting real bugs like 'Welcome, Sw...')
-                if !defects.isEmpty {
-                    Section(header: Text("🚨 Active Issue Detected")) {
-                        ForEach(defects, id: \.id) { defect in
-                            Button(action: {
-                                selectedDefect = defect
-                            }) {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    HStack {
-                                        Text("[\(defect.category.rawValue)]")
-                                            .font(.caption2)
-                                            .fontWeight(.bold)
-                                            .foregroundColor(.red)
-                                        Text(defect.title)
-                                            .font(.subheadline)
-                                            .fontWeight(.bold)
-                                            .foregroundColor(.primary)
-                                        Spacer()
-                                        Image(systemName: "chevron.right")
-                                            .font(.caption)
-                                            .foregroundColor(.secondary)
-                                    }
-                                    if let act = defect.actualBehavior {
-                                        Text("Actual: \(act)")
-                                            .font(.caption)
-                                            .foregroundColor(.secondary)
-                                    }
-                                    if let fix = defect.recommendedCorrection {
-                                        Text("💡 Suggested Fix: \(fix)")
-                                            .font(.caption2)
-                                            .foregroundColor(.blue)
-                                    }
-                                }
-                                .padding(.vertical, 4)
-                                .contentShape(Rectangle())
-                            }
-                            .buttonStyle(PlainButtonStyle())
-                        }
-                    }
-                }
-
-                // 3. Creative Full-Width Section Cards (No Truncated Tabs!)
-                Section(header: Text("Engineering Audit Domains")) {
-                    // Card 1: Bugs & Defect Tracker
-                    domainRow(
-                        title: "Bugs & Defect Tracker",
-                        subtitle: defects.isEmpty ? "0 defects • Runtime & UI rendering clean" : "\(defects.count) issue(s) detected (e.g., text clipping)",
-                        badge: "\(defects.count) Bugs",
-                        badgeColor: defects.isEmpty ? .green : .red,
-                        icon: "ladybug.fill",
-                        iconColor: .red
-                    ) {
-                        activeSection = .defects
-                    }
-
-                    // Card 2: Covered Screens & UI/UX Audit
-                    domainRow(
-                        title: "Covered Screens & UI/UX",
-                        subtitle: "\(screens.count) screens • AutoLayout, dynamic type & controls",
-                        badge: "\(screens.count) Screens",
-                        badgeColor: .blue,
-                        icon: "iphone.smartkeyboard",
-                        iconColor: .blue
-                    ) {
-                        activeSection = .screens
-                    }
-
-                    // Card 3: Anti-Hacking & Security Shield
-                    domainRow(
-                        title: "Anti-Hacking & Security Shield",
-                        subtitle: "Jailbreak defense, anti-debugging, Keychain, MITM, ATS",
-                        badge: antiHackingReport.grade,
-                        badgeColor: antiHackingReport.isProtectedAgainstHackers ? .green : .orange,
-                        icon: "shield.checkered",
-                        iconColor: .green
-                    ) {
-                        activeSection = .antiHacking
-                    }
-
-                    // Card 4: Memory Leaks & Code Quality
-                    domainRow(
-                        title: "Memory Leaks & Code Quality",
-                        subtitle: "Missing private, missing guard, [weak self] retain cycles",
-                        badge: "\(architecturalReport.findings.count) Findings",
-                        badgeColor: architecturalReport.findings.isEmpty ? .green : .purple,
-                        icon: "brain.head.profile",
-                        iconColor: .purple
-                    ) {
-                        activeSection = .architecture
-                    }
-
-                    // Card 5: Concurrency & Layout Safety
-                    domainRow(
-                        title: "Concurrency & Layout Safety",
-                        subtitle: "Main-thread layout engine safety & actor isolation",
-                        badge: "MainActor Safe",
-                        badgeColor: .teal,
-                        icon: "bolt.fill",
-                        iconColor: .teal
-                    ) {
-                        activeSection = .concurrency
-                    }
-
-                    // Card 6: AI Smart Engineering Advisor
-                    domainRow(
-                        title: "AI Smart Engineering Advisor",
-                        subtitle: "Intelligent root cause diagnosis & automatic code patches",
-                        badge: "AI Powered",
-                        badgeColor: .indigo,
-                        icon: "sparkles",
-                        iconColor: .indigo
-                    ) {
-                        activeSection = .aiAdvisor
-                    }
-
-                    // Card 7: Automated Test Journeys
-                    domainRow(
-                        title: "Automated Test Journeys",
-                        subtitle: "\(journeys.count) end-to-end flows • UI automation & regressions",
-                        badge: "Execute",
-                        badgeColor: .orange,
-                        icon: "play.circle.fill",
-                        iconColor: .orange
-                    ) {
-                        activeSection = .journeys
-                    }
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .zIndex(100)
                 }
             }
             .navigationTitle("Test Center")
@@ -218,10 +82,18 @@ public struct InAppTestCenterView: View {
             .navigationBarTitleDisplayMode(.inline)
             #endif
             .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    if !isLoading {
+                        Button(action: copyReportToClipboard) {
+                            Image(systemName: "doc.on.doc")
+                        }
+                    }
+                }
                 ToolbarItem(placement: .primaryAction) {
                     Button(action: runLiveAudit) {
                         Image(systemName: "arrow.clockwise")
                     }
+                    .disabled(isLoading)
                 }
             }
             .sheet(item: $activeSection) { section in
@@ -236,6 +108,290 @@ public struct InAppTestCenterView: View {
         }
         .onAppear {
             runLiveAudit()
+        }
+    }
+
+    // MARK: - Dedicated Loader View
+    private var loadingView: some View {
+        VStack(spacing: 24) {
+            Spacer()
+
+            ZStack {
+                Circle()
+                    .stroke(Color.blue.opacity(0.12), lineWidth: 8)
+                    .frame(width: 96, height: 96)
+
+                Circle()
+                    .trim(from: 0, to: CGFloat(loadingProgress))
+                    .stroke(
+                        LinearGradient(
+                            colors: [.blue, .purple],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        style: StrokeStyle(lineWidth: 8, lineCap: .round)
+                    )
+                    .frame(width: 96, height: 96)
+                    .rotationEffect(.degrees(-90))
+                    .animation(.easeInOut(duration: 0.35), value: loadingProgress)
+
+                Image(systemName: "shield.checkered")
+                    .font(.system(size: 40, weight: .bold))
+                    .foregroundColor(.blue)
+            }
+
+            VStack(spacing: 8) {
+                Text("Loading Test Center Report")
+                    .font(.title2)
+                    .fontWeight(.bold)
+                    .foregroundColor(.primary)
+
+                Text("Please wait, we are fetching the report data...")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+
+            VStack(spacing: 10) {
+                ProgressView(value: loadingProgress, total: 1.0)
+                    .progressViewStyle(LinearProgressViewStyle(tint: .blue))
+                    .frame(width: 250)
+
+                HStack(spacing: 8) {
+                    ProgressView()
+                        .scaleEffect(0.8)
+                    Text(loadingStageMessage)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+            .padding(.top, 6)
+
+            Spacer()
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        #if canImport(UIKit) && !os(watchOS)
+        .background(Color(UIColor.systemGroupedBackground))
+        #endif
+    }
+
+    // MARK: - Main Content View (Revealed when data arrives)
+    private var mainContentView: some View {
+        List {
+            // Search / Filter Field
+            Section {
+                HStack(spacing: 8) {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundColor(.secondary)
+                    TextField("Search domains, screens, or bugs...", text: $searchQuery)
+                        .textFieldStyle(PlainTextFieldStyle())
+                    if !searchQuery.isEmpty {
+                        Button(action: { searchQuery = "" }) {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundColor(.secondary)
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                    }
+                }
+                .padding(.vertical, 4)
+            }
+
+            // 1. Hero Project Quality & App Header with KPI Cards Grid
+            Section {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(reportTitle)
+                                .font(.title2)
+                                .fontWeight(.bold)
+                            Text("Bundle: \(bundleIdentifier) • v\(appVersion)")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        Spacer()
+                        VStack(alignment: .trailing, spacing: 2) {
+                            Text("\(String(format: "%.1f", qualityScore))%")
+                                .font(.system(size: 28, weight: .bold, design: .rounded))
+                                .foregroundColor(qualityScore >= 90 ? .green : (qualityScore >= 75 ? .orange : .red))
+                            Text(qualityGrade)
+                                .font(.caption2)
+                                .fontWeight(.bold)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+
+                    Divider()
+
+                    // Quick 4-column KPI cards
+                    HStack(spacing: 8) {
+                        kpiCard(title: "Score", value: "\(String(format: "%.0f", qualityScore))%", color: qualityScore >= 90 ? .green : .orange, icon: "chart.line.uptrend.xyaxis")
+                        kpiCard(title: "Defects", value: "\(defects.count)", color: defects.isEmpty ? .green : .red, icon: "ladybug.fill")
+                        kpiCard(title: "Screens", value: "\(screens.count)", color: .blue, icon: "iphone")
+                        kpiCard(title: "Security", value: antiHackingReport.grade, color: antiHackingReport.isProtectedAgainstHackers ? .green : .orange, icon: "shield.fill")
+                    }
+
+                    // Status alert bar
+                    HStack(spacing: 8) {
+                        Image(systemName: defects.isEmpty ? "checkmark.seal.fill" : "exclamationmark.triangle.fill")
+                            .foregroundColor(defects.isEmpty ? .green : .red)
+                        Text(defects.isEmpty ? "All Systems Clean • 0 Active Bugs" : "\(defects.count) Active Issue(s) Detected (Click below)")
+                            .font(.caption)
+                            .fontWeight(.semibold)
+                            .foregroundColor(defects.isEmpty ? .primary : .red)
+                        Spacer()
+                        Button(action: copyReportToClipboard) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "doc.on.doc")
+                                Text("Copy Summary")
+                            }
+                            .font(.caption2)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Color.blue.opacity(0.12))
+                            .foregroundColor(.blue)
+                            .cornerRadius(6)
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                    }
+                }
+                .padding(.vertical, 4)
+            }
+
+            // 2. Active Bug Alert Card (Highlighting real bugs like 'Welcome, Sw...')
+            if !filteredDefects.isEmpty {
+                Section(header: Text("🚨 Active Issue Detected (\(filteredDefects.count))")) {
+                    ForEach(filteredDefects, id: \.id) { defect in
+                        Button(action: {
+                            selectedDefect = defect
+                        }) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                HStack {
+                                    Text("[\(defect.category.rawValue)]")
+                                        .font(.caption2)
+                                        .fontWeight(.bold)
+                                        .foregroundColor(.red)
+                                    Text(defect.title)
+                                        .font(.subheadline)
+                                        .fontWeight(.bold)
+                                        .foregroundColor(.primary)
+                                    Spacer()
+                                    Image(systemName: "chevron.right")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                                if let act = defect.actualBehavior {
+                                    Text("Actual: \(act)")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                                if let fix = defect.recommendedCorrection {
+                                    Text("💡 Suggested Fix: \(fix)")
+                                        .font(.caption2)
+                                        .foregroundColor(.blue)
+                                }
+                            }
+                            .padding(.vertical, 4)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                    }
+                }
+            }
+
+            // 3. Creative Full-Width Section Cards (No Truncated Tabs!)
+            Section(header: Text("Engineering Audit Domains")) {
+                if matchesFilter("Bugs & Defect Tracker") {
+                    domainRow(
+                        title: "Bugs & Defect Tracker",
+                        subtitle: defects.isEmpty ? "0 defects • Runtime & UI rendering clean" : "\(defects.count) issue(s) detected (e.g., text clipping)",
+                        badge: "\(defects.count) Bugs",
+                        badgeColor: defects.isEmpty ? .green : .red,
+                        icon: "ladybug.fill",
+                        iconColor: .red
+                    ) {
+                        activeSection = .defects
+                    }
+                }
+
+                if matchesFilter("Covered Screens & UI/UX") {
+                    domainRow(
+                        title: "Covered Screens & UI/UX",
+                        subtitle: "\(screens.count) screens • AutoLayout, dynamic type & controls",
+                        badge: "\(screens.count) Screens",
+                        badgeColor: .blue,
+                        icon: "iphone.smartkeyboard",
+                        iconColor: .blue
+                    ) {
+                        activeSection = .screens
+                    }
+                }
+
+                if matchesFilter("Anti-Hacking & Security Shield") {
+                    domainRow(
+                        title: "Anti-Hacking & Security Shield",
+                        subtitle: "Jailbreak defense, anti-debugging, Keychain, MITM, ATS",
+                        badge: antiHackingReport.grade,
+                        badgeColor: antiHackingReport.isProtectedAgainstHackers ? .green : .orange,
+                        icon: "shield.checkered",
+                        iconColor: .green
+                    ) {
+                        activeSection = .antiHacking
+                    }
+                }
+
+                if matchesFilter("Memory Leaks & Code Quality") {
+                    domainRow(
+                        title: "Memory Leaks & Code Quality",
+                        subtitle: "Missing private, missing guard, [weak self] retain cycles",
+                        badge: "\(architecturalReport.findings.count) Findings",
+                        badgeColor: architecturalReport.findings.isEmpty ? .green : .purple,
+                        icon: "brain.head.profile",
+                        iconColor: .purple
+                    ) {
+                        activeSection = .architecture
+                    }
+                }
+
+                if matchesFilter("Concurrency & Layout Safety") {
+                    domainRow(
+                        title: "Concurrency & Layout Safety",
+                        subtitle: "Main-thread layout engine safety & actor isolation",
+                        badge: "MainActor Safe",
+                        badgeColor: .teal,
+                        icon: "bolt.fill",
+                        iconColor: .teal
+                    ) {
+                        activeSection = .concurrency
+                    }
+                }
+
+                if matchesFilter("AI Smart Engineering Advisor") {
+                    domainRow(
+                        title: "AI Smart Engineering Advisor",
+                        subtitle: "Intelligent root cause diagnosis & automatic code patches",
+                        badge: "AI Powered",
+                        badgeColor: .indigo,
+                        icon: "sparkles",
+                        iconColor: .indigo
+                    ) {
+                        activeSection = .aiAdvisor
+                    }
+                }
+
+                if matchesFilter("Automated Test Journeys") {
+                    domainRow(
+                        title: "Automated Test Journeys",
+                        subtitle: "\(journeys.count) end-to-end flows • UI automation & regressions",
+                        badge: "Execute",
+                        badgeColor: .orange,
+                        icon: "play.circle.fill",
+                        iconColor: .orange
+                    ) {
+                        activeSection = .journeys
+                    }
+                }
+            }
         }
     }
 
@@ -692,6 +848,12 @@ public struct InAppTestCenterView: View {
 
     private func runLiveAudit() {
         #if canImport(UIKit) && !os(watchOS)
+        withAnimation {
+            self.isLoading = true
+            self.loadingProgress = 0.15
+            self.loadingStageMessage = "Please wait, we are fetching the report data..."
+        }
+
         // 1. Instant in-memory refresh (< 2ms)
         _ = LiveScreenAuditEngine.shared.auditActiveWindow()
         ScreenRegistry.shared.discoverRunningScreens()
@@ -702,9 +864,23 @@ public struct InAppTestCenterView: View {
         self.runtimeEvents = RuntimeTelemetryStore.shared.allEvents
 
         // 2. Heavy static disk scans executed asynchronously in the background
-        Task.detached(priority: .utility) {
+        Task.detached(priority: .userInitiated) {
+            await MainActor.run {
+                self.loadingProgress = 0.35
+                self.loadingStageMessage = "Auditing Anti-Hacking & Security Shield..."
+            }
             let antiHacking = SecurityAndAntiHackingAuditor().auditApplicationDefense()
+
+            await MainActor.run {
+                self.loadingProgress = 0.60
+                self.loadingStageMessage = "Analyzing Memory & Architectural Patterns..."
+            }
             let arch = ArchitecturalAntiPatternAuditor().auditProject()
+
+            await MainActor.run {
+                self.loadingProgress = 0.85
+                self.loadingStageMessage = "Compiling Senior Engineering Quality Report..."
+            }
             let senior = SeniorProjectAuditor().auditProject()
 
             var audits: [String: ScreenSeniorQualityReport] = [:]
@@ -718,10 +894,84 @@ public struct InAppTestCenterView: View {
             }
 
             await MainActor.run {
+                self.loadingProgress = 1.0
+                self.loadingStageMessage = "All Data Ready!"
                 self.antiHackingReport = antiHacking
                 self.architecturalReport = arch
                 self.seniorReport = senior
                 self.screenAudits = audits
+
+                // Short delay so the developer sees completion before smooth dismissal
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                    withAnimation(.easeInOut(duration: 0.35)) {
+                        self.isLoading = false
+                    }
+                }
+            }
+        }
+        #endif
+    }
+
+    // MARK: - UI Helpers for Senior Developer Experience
+
+    private func kpiCard(title: String, value: String, color: Color, icon: String) -> some View {
+        VStack(spacing: 4) {
+            Image(systemName: icon)
+                .font(.caption2)
+                .foregroundColor(color)
+            Text(value)
+                .font(.system(size: 13, weight: .bold, design: .rounded))
+                .foregroundColor(.primary)
+            Text(title)
+                .font(.system(size: 10, weight: .medium))
+                .foregroundColor(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 8)
+        .background(color.opacity(0.1))
+        .cornerRadius(8)
+    }
+
+    private var filteredDefects: [DefectRecord] {
+        if searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return defects
+        }
+        let q = searchQuery.lowercased()
+        return defects.filter {
+            $0.title.lowercased().contains(q) ||
+            $0.category.rawValue.lowercased().contains(q) ||
+            ($0.actualBehavior?.lowercased().contains(q) ?? false)
+        }
+    }
+
+    private func matchesFilter(_ text: String) -> Bool {
+        if searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return true
+        }
+        return text.lowercased().contains(searchQuery.lowercased())
+    }
+
+    private func copyReportToClipboard() {
+        #if canImport(UIKit) && !os(watchOS)
+        let reportText = """
+        📋 iOS QA Test Center Report
+        -----------------------------
+        App: \(reportTitle) (v\(appVersion))
+        Bundle: \(bundleIdentifier)
+        Overall Quality: \(String(format: "%.1f", qualityScore))% (\(qualityGrade))
+        Active Issues: \(defects.count)
+        Screens Audited: \(screens.count)
+        Security Shield: \(antiHackingReport.grade) (\(antiHackingReport.isProtectedAgainstHackers ? "Protected" : "Vulnerable"))
+        Code Findings: \(architecturalReport.findings.count)
+        -----------------------------
+        """
+        UIPasteboard.general.string = reportText
+        withAnimation {
+            showCopiedToast = true
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+            withAnimation {
+                showCopiedToast = false
             }
         }
         #endif

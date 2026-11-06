@@ -269,17 +269,26 @@ final class RuntimeMonitoringTests: XCTestCase {
 
     // MARK: - 10. InAppTestCenterView Loader & UX Tests
 
+    @MainActor
     func testInAppTestCenterView_InstantiatesWithLoaderAndSections() {
         let view = InAppTestCenterView()
         XCTAssertNotNil(view)
 
-        // Verify active audit sections
+        // Verify active audit sections (all 12 comprehensive domains)
         let sections = InAppTestCenterView.ActiveAuditSection.allCases
-        XCTAssertEqual(sections.count, 7)
+        XCTAssertEqual(sections.count, 12)
         XCTAssertTrue(sections.contains(.defects))
         XCTAssertTrue(sections.contains(.screens))
         XCTAssertTrue(sections.contains(.antiHacking))
         XCTAssertTrue(sections.contains(.architecture))
+        XCTAssertTrue(sections.contains(.concurrency))
+        XCTAssertTrue(sections.contains(.appleGuidelines))
+        XCTAssertTrue(sections.contains(.infoPlist))
+        XCTAssertTrue(sections.contains(.appStoreReadiness))
+        XCTAssertTrue(sections.contains(.performance))
+        XCTAssertTrue(sections.contains(.accessibilityLocalization))
+        XCTAssertTrue(sections.contains(.aiAdvisor))
+        XCTAssertTrue(sections.contains(.journeys))
     }
 }
 

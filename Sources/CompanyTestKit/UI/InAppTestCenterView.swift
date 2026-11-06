@@ -5,6 +5,7 @@ import UIKit
 import CompanyiOSKit
 
 /// Senior-level developer Test Center dashboard and Engineering Audit Command Center.
+/// Covers all 12 unified audit domains with 100% free, native Apple technologies.
 public struct InAppTestCenterView: View {
     @State private var screens: [ScreenDefinition] = ScreenRegistry.shared.allScreens
     @State private var journeys: [UserJourney] = ScreenRegistry.shared.allJourneys
@@ -15,19 +16,26 @@ public struct InAppTestCenterView: View {
     @State private var architecturalReport: ArchitecturalAuditReport = ArchitecturalAntiPatternAuditor.baselineReport()
     @State private var screenAudits: [String: ScreenSeniorQualityReport] = [:]
 
+    // New 5 Audit Domain Reports
+    @State private var appleGuidelinesReport: AppleGuidelinesAuditReport = AppleGuidelinesAuditor.baselineReport()
+    @State private var infoPlistReport: InfoPlistValidationReport = InfoPlistValidator.baselineReport()
+    @State private var appStoreReadinessReport: AppStoreReadinessReport = AppStoreReadinessAuditor.baselineReport()
+    @State private var performanceReport: PerformanceAndLaunchReport = AppPerformanceAuditor.baselineReport()
+    @State private var accessibilityReport: AccessibilityAndLocalizationReport = AccessibilityAndLocalizationAuditor.baselineReport()
+
     // Loading & UX Enhancement States
     @State private var isLoading: Bool = true
     @State private var loadingStageMessage: String = "Please wait, we are fetching the report data..."
     @State private var loadingProgress: Double = 0.15
+    @State private var loadErrorMessage: String? = nil
     @State private var showCopiedToast: Bool = false
+    @State private var toastMessage: String = "QA Report Summary Copied! 📋"
     @State private var searchQuery: String = ""
 
-    // Navigation State (Card-based navigation replacing cramped segmented picker)
+    // Navigation State
     @State private var activeSection: ActiveAuditSection? = nil
     @State private var selectedScreen: ScreenDefinition? = nil
     @State private var selectedDefect: DefectRecord? = nil
-    @State private var isExecuting: Bool = false
-    @State private var executionStatusMessage: String = "Auditing live application..."
 
     public enum ActiveAuditSection: String, Identifiable, CaseIterable {
         case defects = "Bugs & Defect Tracker"
@@ -35,6 +43,11 @@ public struct InAppTestCenterView: View {
         case antiHacking = "Anti-Hacking & Security Shield"
         case architecture = "Memory Leaks & Code Quality"
         case concurrency = "Concurrency & Layout Safety"
+        case appleGuidelines = "Apple Guidelines & Compliance"
+        case infoPlist = "Info.plist & Entitlements"
+        case appStoreReadiness = "TestFlight & App Store Readiness"
+        case performance = "Performance & Launch-Time"
+        case accessibilityLocalization = "Accessibility & Localization"
         case aiAdvisor = "AI Smart Engineering Advisor"
         case journeys = "Automated Test Journeys"
 
@@ -49,6 +62,9 @@ public struct InAppTestCenterView: View {
                 if isLoading {
                     loadingView
                         .transition(.opacity)
+                } else if let error = loadErrorMessage {
+                    errorView(message: error)
+                        .transition(.opacity)
                 } else {
                     mainContentView
                         .transition(.opacity)
@@ -60,9 +76,9 @@ public struct InAppTestCenterView: View {
                         HStack(spacing: 8) {
                             Image(systemName: "checkmark.circle.fill")
                                 .foregroundColor(.green)
-                            Text("QA Report Summary Copied to Clipboard! 📋")
+                            Text(toastMessage)
                                 .font(.caption)
-                                .fontWeight(.semibold)
+                                .bold()
                                 .foregroundColor(.white)
                         }
                         .padding(.horizontal, 16)
@@ -83,14 +99,14 @@ public struct InAppTestCenterView: View {
             #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    if !isLoading {
+                    if !isLoading && loadErrorMessage == nil {
                         Button(action: copyReportToClipboard) {
                             Image(systemName: "doc.on.doc")
                         }
                     }
                 }
                 ToolbarItem(placement: .primaryAction) {
-                    Button(action: runLiveAudit) {
+                    Button(action: { runLiveAudit(forceRefresh: true) }) {
                         Image(systemName: "arrow.clockwise")
                     }
                     .disabled(isLoading)
@@ -107,7 +123,7 @@ public struct InAppTestCenterView: View {
             }
         }
         .onAppear {
-            runLiveAudit()
+            runLiveAudit(forceRefresh: false)
         }
     }
 
@@ -143,7 +159,7 @@ public struct InAppTestCenterView: View {
             VStack(spacing: 8) {
                 Text("Loading Test Center Report")
                     .font(.title2)
-                    .fontWeight(.bold)
+                    .bold()
                     .foregroundColor(.primary)
 
                 Text("Please wait, we are fetching the report data...")
@@ -176,7 +192,48 @@ public struct InAppTestCenterView: View {
         #endif
     }
 
-    // MARK: - Main Content View (Revealed when data arrives)
+    // MARK: - Resilient Error View
+    private func errorView(message: String) -> some View {
+        VStack(spacing: 16) {
+            Spacer()
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 54))
+                .foregroundColor(.orange)
+
+            Text("Unable to Load Audit Report")
+                .font(.title3)
+                .bold()
+
+            Text(message)
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 32)
+
+            Button(action: { runLiveAudit(forceRefresh: true) }) {
+                HStack(spacing: 8) {
+                    Image(systemName: "arrow.clockwise")
+                    Text("Retry Audit")
+                        .bold()
+                }
+                .font(.subheadline)
+                .foregroundColor(.white)
+                .padding(.horizontal, 24)
+                .padding(.vertical, 12)
+                .background(Color.blue)
+                .cornerRadius(10)
+            }
+            .padding(.top, 8)
+
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        #if canImport(UIKit) && !os(watchOS)
+        .background(Color(UIColor.systemGroupedBackground))
+        #endif
+    }
+
+    // MARK: - Main Content View (12 Domains)
     private var mainContentView: some View {
         List {
             // Search / Filter Field
@@ -204,7 +261,7 @@ public struct InAppTestCenterView: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(reportTitle)
                                 .font(.title2)
-                                .fontWeight(.bold)
+                                .bold()
                             Text("Bundle: \(bundleIdentifier) • v\(appVersion)")
                                 .font(.caption)
                                 .foregroundColor(.secondary)
@@ -216,7 +273,7 @@ public struct InAppTestCenterView: View {
                                 .foregroundColor(qualityScore >= 90 ? .green : (qualityScore >= 75 ? .orange : .red))
                             Text(qualityGrade)
                                 .font(.caption2)
-                                .fontWeight(.bold)
+                                .bold()
                                 .foregroundColor(.secondary)
                         }
                     }
@@ -228,7 +285,7 @@ public struct InAppTestCenterView: View {
                         kpiCard(title: "Score", value: "\(String(format: "%.0f", qualityScore))%", color: qualityScore >= 90 ? .green : .orange, icon: "chart.line.uptrend.xyaxis")
                         kpiCard(title: "Defects", value: "\(defects.count)", color: defects.isEmpty ? .green : .red, icon: "ladybug.fill")
                         kpiCard(title: "Screens", value: "\(screens.count)", color: .blue, icon: "iphone")
-                        kpiCard(title: "Security", value: antiHackingReport.grade, color: antiHackingReport.isProtectedAgainstHackers ? .green : .orange, icon: "shield.fill")
+                        kpiCard(title: "Readiness", value: appStoreReadinessReport.gateStatus == .readyForUpload ? "Pass" : "Check", color: appStoreReadinessReport.gateStatus == .readyForUpload ? .green : .orange, icon: "airplane.departure")
                     }
 
                     // Status alert bar
@@ -237,7 +294,7 @@ public struct InAppTestCenterView: View {
                             .foregroundColor(defects.isEmpty ? .green : .red)
                         Text(defects.isEmpty ? "All Systems Clean • 0 Active Bugs" : "\(defects.count) Active Issue(s) Detected (Click below)")
                             .font(.caption)
-                            .fontWeight(.semibold)
+                            .bold()
                             .foregroundColor(defects.isEmpty ? .primary : .red)
                         Spacer()
                         Button(action: copyReportToClipboard) {
@@ -258,7 +315,7 @@ public struct InAppTestCenterView: View {
                 .padding(.vertical, 4)
             }
 
-            // 2. Active Bug Alert Card (Highlighting real bugs like 'Welcome, Sw...')
+            // 2. Active Bug Alert Card
             if !filteredDefects.isEmpty {
                 Section(header: Text("🚨 Active Issue Detected (\(filteredDefects.count))")) {
                     ForEach(filteredDefects, id: \.id) { defect in
@@ -269,11 +326,11 @@ public struct InAppTestCenterView: View {
                                 HStack {
                                     Text("[\(defect.category.rawValue)]")
                                         .font(.caption2)
-                                        .fontWeight(.bold)
+                                        .bold()
                                         .foregroundColor(.red)
                                     Text(defect.title)
                                         .font(.subheadline)
-                                        .fontWeight(.bold)
+                                        .bold()
                                         .foregroundColor(.primary)
                                     Spacer()
                                     Image(systemName: "chevron.right")
@@ -299,11 +356,12 @@ public struct InAppTestCenterView: View {
                 }
             }
 
-            // 3. Creative Full-Width Section Cards (No Truncated Tabs!)
-            Section(header: Text("Engineering Audit Domains")) {
+            // 3. Consolidated 12 Engineering Audit Domains
+            Section(header: Text("Engineering Audit Domains (12 Domains)")) {
+                // Domain 1: Defects
                 if matchesFilter("Bugs & Defect Tracker") {
                     domainRow(
-                        title: "Bugs & Defect Tracker",
+                        title: "1. Bugs & Defect Tracker",
                         subtitle: defects.isEmpty ? "0 defects • Runtime & UI rendering clean" : "\(defects.count) issue(s) detected (e.g., text clipping)",
                         badge: "\(defects.count) Bugs",
                         badgeColor: defects.isEmpty ? .green : .red,
@@ -314,9 +372,10 @@ public struct InAppTestCenterView: View {
                     }
                 }
 
+                // Domain 2: Screens UI/UX
                 if matchesFilter("Covered Screens & UI/UX") {
                     domainRow(
-                        title: "Covered Screens & UI/UX",
+                        title: "2. Covered Screens & UI/UX",
                         subtitle: "\(screens.count) screens • AutoLayout, dynamic type & controls",
                         badge: "\(screens.count) Screens",
                         badgeColor: .blue,
@@ -327,9 +386,10 @@ public struct InAppTestCenterView: View {
                     }
                 }
 
+                // Domain 3: Anti-Hacking
                 if matchesFilter("Anti-Hacking & Security Shield") {
                     domainRow(
-                        title: "Anti-Hacking & Security Shield",
+                        title: "3. Anti-Hacking & Security Shield",
                         subtitle: "Jailbreak defense, anti-debugging, Keychain, MITM, ATS",
                         badge: antiHackingReport.grade,
                         badgeColor: antiHackingReport.isProtectedAgainstHackers ? .green : .orange,
@@ -340,9 +400,10 @@ public struct InAppTestCenterView: View {
                     }
                 }
 
+                // Domain 4: Memory Leaks & Code Quality
                 if matchesFilter("Memory Leaks & Code Quality") {
                     domainRow(
-                        title: "Memory Leaks & Code Quality",
+                        title: "4. Memory Leaks & Code Quality",
                         subtitle: "Missing private, missing guard, [weak self] retain cycles",
                         badge: "\(architecturalReport.findings.count) Findings",
                         badgeColor: architecturalReport.findings.isEmpty ? .green : .purple,
@@ -353,9 +414,10 @@ public struct InAppTestCenterView: View {
                     }
                 }
 
+                // Domain 5: Concurrency Safety
                 if matchesFilter("Concurrency & Layout Safety") {
                     domainRow(
-                        title: "Concurrency & Layout Safety",
+                        title: "5. Concurrency & Layout Safety",
                         subtitle: "Main-thread layout engine safety & actor isolation",
                         badge: "MainActor Safe",
                         badgeColor: .teal,
@@ -366,22 +428,94 @@ public struct InAppTestCenterView: View {
                     }
                 }
 
+                // Domain 6: Apple Guidelines & Compliance
+                if matchesFilter("Apple Guidelines & Compliance") {
+                    domainRow(
+                        title: "6. Apple Guidelines & Compliance",
+                        subtitle: "Review guidelines, Privacy Manifest, Required Reason APIs",
+                        badge: "\(Int(appleGuidelinesReport.scorePercentage))% Score",
+                        badgeColor: appleGuidelinesReport.isCompliant ? .green : .orange,
+                        icon: "applelogo",
+                        iconColor: .primary
+                    ) {
+                        activeSection = .appleGuidelines
+                    }
+                }
+
+                // Domain 7: Info.plist & Entitlements
+                if matchesFilter("Info.plist & Entitlements") {
+                    domainRow(
+                        title: "7. Info.plist & Entitlements",
+                        subtitle: "Privacy usage keys, Bluetooth, Local Network, URL schemes",
+                        badge: infoPlistReport.findings.isEmpty ? "Compliant" : "\(infoPlistReport.findings.count) Findings",
+                        badgeColor: infoPlistReport.findings.isEmpty ? .green : .orange,
+                        icon: "list.bullet.rectangle",
+                        iconColor: .indigo
+                    ) {
+                        activeSection = .infoPlist
+                    }
+                }
+
+                // Domain 8: TestFlight & App Store Readiness
+                if matchesFilter("TestFlight & App Store Readiness") {
+                    domainRow(
+                        title: "8. TestFlight & App Store Readiness",
+                        subtitle: "Pre-release signing, provisioning, icons, SemVer & export",
+                        badge: appStoreReadinessReport.gateStatus == .readyForUpload ? "Ready" : "Needs Review",
+                        badgeColor: appStoreReadinessReport.gateStatus == .readyForUpload ? .green : .orange,
+                        icon: "airplane.departure",
+                        iconColor: .blue
+                    ) {
+                        activeSection = .appStoreReadiness
+                    }
+                }
+
+                // Domain 9: Performance & Launch-Time
+                if matchesFilter("Performance & Launch-Time") {
+                    domainRow(
+                        title: "9. Performance & Launch-Time",
+                        subtitle: "Cold/warm launch estimate, RAM footprint, main hangs",
+                        badge: "\(String(format: "%.0f", performanceReport.coldLaunchEstimatedMs))ms Launch",
+                        badgeColor: performanceReport.coldLaunchEstimatedMs < 1000 ? .green : .orange,
+                        icon: "speedometer",
+                        iconColor: .orange
+                    ) {
+                        activeSection = .performance
+                    }
+                }
+
+                // Domain 10: Accessibility & Localization
+                if matchesFilter("Accessibility & Localization") {
+                    domainRow(
+                        title: "10. Accessibility & Localization",
+                        subtitle: "VoiceOver labels, 44x44pt touch targets, hardcoded text",
+                        badge: "\(Int(accessibilityReport.scorePercentage))% Accessible",
+                        badgeColor: accessibilityReport.scorePercentage >= 85 ? .green : .orange,
+                        icon: "accessibility",
+                        iconColor: .teal
+                    ) {
+                        activeSection = .accessibilityLocalization
+                    }
+                }
+
+                // Domain 11: AI Smart Engineering Advisor
                 if matchesFilter("AI Smart Engineering Advisor") {
                     domainRow(
-                        title: "AI Smart Engineering Advisor",
-                        subtitle: "Intelligent root cause diagnosis & automatic code patches",
-                        badge: "AI Powered",
-                        badgeColor: .indigo,
+                        title: "11. AI Smart Engineering Advisor",
+                        subtitle: "100% offline, free root-cause diagnosis & Swift XCTest patches",
+                        badge: "Free AI Local",
+                        badgeColor: .purple,
                         icon: "sparkles",
-                        iconColor: .indigo
+                        iconColor: .purple
                     ) {
                         activeSection = .aiAdvisor
                     }
                 }
 
+                // Domain 12: Automated Test Journeys
                 if matchesFilter("Automated Test Journeys") {
                     domainRow(
-                        title: "Automated Test Journeys",
+                        title: "12. Automated Test Journeys",
                         subtitle: "\(journeys.count) end-to-end flows • UI automation & regressions",
                         badge: "Execute",
                         badgeColor: .orange,
@@ -395,8 +529,7 @@ public struct InAppTestCenterView: View {
         }
     }
 
-    // MARK: - Subviews & Rows
-
+    // MARK: - Domain Row Helper
     private func domainRow(
         title: String,
         subtitle: String,
@@ -426,7 +559,7 @@ public struct InAppTestCenterView: View {
 
                 Text(badge)
                     .font(.caption2)
-                    .fontWeight(.bold)
+                    .bold()
                     .padding(.horizontal, 6)
                     .padding(.vertical, 3)
                     .background(badgeColor.opacity(0.15))
@@ -444,7 +577,6 @@ public struct InAppTestCenterView: View {
     }
 
     // MARK: - Section Detail Sheet Routing
-
     @ViewBuilder
     private func sectionDetailView(for section: ActiveAuditSection) -> some View {
         NavigationView {
@@ -460,6 +592,16 @@ public struct InAppTestCenterView: View {
                     architecturalDetailView
                 case .concurrency:
                     concurrencyDetailView
+                case .appleGuidelines:
+                    appleGuidelinesDetailView
+                case .infoPlist:
+                    infoPlistDetailView
+                case .appStoreReadiness:
+                    appStoreReadinessDetailView
+                case .performance:
+                    performanceDetailView
+                case .accessibilityLocalization:
+                    accessibilityDetailView
                 case .aiAdvisor:
                     aiAdvisorDetailView
                 case .journeys:
@@ -479,7 +621,6 @@ public struct InAppTestCenterView: View {
     }
 
     // MARK: - Section 1: Defects View
-
     private var defectsListView: some View {
         List {
             if defects.isEmpty {
@@ -502,11 +643,11 @@ public struct InAppTestCenterView: View {
                         HStack {
                             Text("[\(defect.category.rawValue)]")
                                 .font(.caption)
-                                .fontWeight(.bold)
+                                .bold()
                                 .foregroundColor(.red)
                             Text(defect.title)
                                 .font(.subheadline)
-                                .fontWeight(.bold)
+                                .bold()
                             Spacer()
                             Text(defect.severity.rawValue)
                                 .font(.caption2)
@@ -543,7 +684,7 @@ public struct InAppTestCenterView: View {
                         }) {
                             Text("View Full Analysis & AI Code Patch →")
                                 .font(.caption2)
-                                .fontWeight(.bold)
+                                .bold()
                                 .foregroundColor(.purple)
                         }
                         .buttonStyle(PlainButtonStyle())
@@ -555,7 +696,6 @@ public struct InAppTestCenterView: View {
     }
 
     // MARK: - Section 2: Screens View
-
     private var screensListView: some View {
         List(screens, id: \.id) { screen in
             Button(action: { selectedScreen = screen }) {
@@ -575,7 +715,7 @@ public struct InAppTestCenterView: View {
                         Spacer()
                         Text("\(String(format: "%.1f", overallScore))%")
                             .font(.caption)
-                            .fontWeight(.bold)
+                            .bold()
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
                             .background(overallScore >= 90 ? Color.green.opacity(0.15) : Color.orange.opacity(0.15))
@@ -625,7 +765,6 @@ public struct InAppTestCenterView: View {
     }
 
     // MARK: - Section 3: Anti-Hacking View
-
     private var antiHackingDetailView: some View {
         List {
             Section(header: Text("Penetration & Defense Score")) {
@@ -633,7 +772,7 @@ public struct InAppTestCenterView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("\(Int(antiHackingReport.hardeningScore))% Hardened")
                             .font(.title2)
-                            .fontWeight(.bold)
+                            .bold()
                             .foregroundColor(.green)
                         Text(antiHackingReport.grade)
                             .font(.caption)
@@ -654,7 +793,7 @@ public struct InAppTestCenterView: View {
                                 .foregroundColor(item.isHardened ? .green : .red)
                             Text(item.defenseName)
                                 .font(.subheadline)
-                                .fontWeight(.bold)
+                                .bold()
                             Spacer()
                         }
                         Text("Threat: \(item.threatVector)")
@@ -677,7 +816,6 @@ public struct InAppTestCenterView: View {
     }
 
     // MARK: - Section 4: Architecture View
-
     private var architecturalDetailView: some View {
         List {
             Section(header: Text("Code Quality Hygiene")) {
@@ -685,7 +823,7 @@ public struct InAppTestCenterView: View {
                     VStack(alignment: .leading) {
                         Text("\(Int(architecturalReport.scorePercentage))% Clean")
                             .font(.title2)
-                            .fontWeight(.bold)
+                            .bold()
                             .foregroundColor(.purple)
                         Text(architecturalReport.grade)
                             .font(.caption)
@@ -709,7 +847,7 @@ public struct InAppTestCenterView: View {
                             HStack {
                                 Text("[\(finding.category)]")
                                     .font(.caption2)
-                                    .fontWeight(.bold)
+                                    .bold()
                                     .foregroundColor(.purple)
                                 Spacer()
                                 Text("Line \(finding.line)")
@@ -718,7 +856,7 @@ public struct InAppTestCenterView: View {
                             }
                             Text(finding.message)
                                 .font(.caption)
-                                .fontWeight(.semibold)
+                                .bold()
                             Text("File: \(finding.sourceFile)")
                                 .font(.caption2)
                                 .foregroundColor(.secondary)
@@ -740,7 +878,6 @@ public struct InAppTestCenterView: View {
     }
 
     // MARK: - Section 5: Concurrency View
-
     private var concurrencyDetailView: some View {
         List {
             Section(header: Text("Main Thread & Layout Engine Safety")) {
@@ -772,19 +909,479 @@ public struct InAppTestCenterView: View {
         }
     }
 
-    // MARK: - Section 6: AI Advisor View
+    // MARK: - Section 6: Apple Guidelines & Compliance Detail View
+    private var appleGuidelinesDetailView: some View {
+        List {
+            Section(header: Text("Compliance Overview")) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("\(Int(appleGuidelinesReport.scorePercentage))% Compliant")
+                            .font(.title2)
+                            .bold()
+                            .foregroundColor(appleGuidelinesReport.isCompliant ? .green : .orange)
+                        Text(appleGuidelinesReport.isCompliant ? "Passed Apple Pre-Check" : "Action Items Required")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    Spacer()
+                    Image(systemName: appleGuidelinesReport.isCompliant ? "checkmark.seal.fill" : "exclamationmark.triangle.fill")
+                        .font(.system(size: 36))
+                        .foregroundColor(appleGuidelinesReport.isCompliant ? .green : .orange)
+                }
 
+                HStack {
+                    Label("\(appleGuidelinesReport.confirmedViolationsCount) Violations", systemImage: "xmark.octagon.fill")
+                        .font(.caption)
+                        .foregroundColor(.red)
+                    Spacer()
+                    Label("\(appleGuidelinesReport.potentialRisksCount) Risks", systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundColor(.orange)
+                    Spacer()
+                    Label("\(appleGuidelinesReport.recommendationsCount) HIG Recs", systemImage: "info.circle.fill")
+                        .font(.caption)
+                        .foregroundColor(.blue)
+                }
+
+                HStack {
+                    Text("Privacy Manifest (PrivacyInfo.xcprivacy):")
+                        .font(.caption)
+                    Spacer()
+                    Text(appleGuidelinesReport.hasPrivacyManifest ? "Present ✅" : "Missing ⚠️")
+                        .font(.caption)
+                        .bold()
+                        .foregroundColor(appleGuidelinesReport.hasPrivacyManifest ? .green : .red)
+                }
+            }
+
+            Section(header: Text("Compliance Findings (\(appleGuidelinesReport.findings.count))")) {
+                if appleGuidelinesReport.findings.isEmpty {
+                    Text("✅ No Apple Review Guidelines violations detected.")
+                        .font(.caption)
+                        .foregroundColor(.green)
+                } else {
+                    ForEach(appleGuidelinesReport.findings) { finding in
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack {
+                                Text(finding.section)
+                                    .font(.caption2)
+                                    .bold()
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(Color.secondary.opacity(0.12))
+                                    .cornerRadius(4)
+
+                                Spacer()
+
+                                Text(finding.level.rawValue)
+                                    .font(.caption2)
+                                    .bold()
+                                    .foregroundColor(finding.level == .confirmedViolation ? .red : (finding.level == .potentialRisk ? .orange : .blue))
+                            }
+
+                            Text(finding.title)
+                                .font(.subheadline)
+                                .bold()
+
+                            Text(finding.detail)
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+
+                            if !finding.remediationSteps.isEmpty {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Remediation Steps:")
+                                        .font(.caption2)
+                                        .bold()
+                                        .foregroundColor(.primary)
+                                    ForEach(finding.remediationSteps, id: \.self) { step in
+                                        Text("• \(step)")
+                                            .font(.caption2)
+                                            .foregroundColor(.secondary)
+                                    }
+                                }
+                            }
+
+                            if let url = URL(string: finding.documentationURL) {
+                                Link(destination: url) {
+                                    HStack(spacing: 4) {
+                                        Text("Official Apple Documentation")
+                                        Image(systemName: "arrow.up.right.square")
+                                    }
+                                    .font(.caption2)
+                                    .foregroundColor(.blue)
+                                }
+                                .padding(.top, 2)
+                            }
+                        }
+                        .padding(.vertical, 4)
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Section 7: Info.plist & Entitlements Detail View
+    private var infoPlistDetailView: some View {
+        List {
+            Section(header: Text("Validation Summary")) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("\(Int(infoPlistReport.overallScore))% Valid")
+                            .font(.title2)
+                            .bold()
+                            .foregroundColor(infoPlistReport.isValid ? .green : .orange)
+                        Text("\(infoPlistReport.inspectedKeysCount) Keys Evaluated • \(infoPlistReport.findings.count) Findings")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    Spacer()
+                    Image(systemName: infoPlistReport.isValid ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
+                        .font(.system(size: 36))
+                        .foregroundColor(infoPlistReport.isValid ? .green : .orange)
+                }
+
+                if !infoPlistReport.configuredPrivacyPermissions.isEmpty {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Active Privacy Descriptions:")
+                            .font(.caption2)
+                            .bold()
+                        Text(infoPlistReport.configuredPrivacyPermissions.joined(separator: ", "))
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
+                }
+            }
+
+            Section(header: Text("Info.plist Findings & Exact Fix Snippets (\(infoPlistReport.findings.count))")) {
+                if infoPlistReport.findings.isEmpty {
+                    Text("✅ Info.plist has complete, compliant privacy usage descriptions and valid configurations.")
+                        .font(.caption)
+                        .foregroundColor(.green)
+                } else {
+                    ForEach(infoPlistReport.findings) { finding in
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack {
+                                Text(finding.key)
+                                    .font(.system(.caption, design: .monospaced))
+                                    .bold()
+                                Spacer()
+                                Text(finding.severity.rawValue)
+                                    .font(.caption2)
+                                    .bold()
+                                    .foregroundColor(finding.severity == .criticalMissing ? .red : .orange)
+                            }
+
+                            if let current = finding.currentValue {
+                                Text("Current Value: \"\(current)\"")
+                                    .font(.caption2)
+                                    .foregroundColor(.secondary)
+                            }
+
+                            Text("Reason: \(finding.reason)")
+                                .font(.caption)
+                                .foregroundColor(.primary)
+
+                            Text("💡 Recommended Fix: \(finding.recommendedFix)")
+                                .font(.caption2)
+                                .foregroundColor(.blue)
+
+                            // Copyable XML plist snippet
+                            VStack(alignment: .leading, spacing: 4) {
+                                HStack {
+                                    Text("Info.plist XML Snippet:")
+                                        .font(.caption2)
+                                        .foregroundColor(.secondary)
+                                    Spacer()
+                                    Button(action: {
+                                        #if canImport(UIKit) && !os(watchOS)
+                                        UIPasteboard.general.string = finding.xmlSnippet
+                                        copyToast(message: "Copied XML snippet! 📋")
+                                        #endif
+                                    }) {
+                                        Text("Copy XML")
+                                            .font(.caption2)
+                                            .foregroundColor(.blue)
+                                    }
+                                }
+
+                                Text(finding.xmlSnippet)
+                                    .font(.system(size: 10, design: .monospaced))
+                                    .padding(6)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .background(Color.secondary.opacity(0.1))
+                                    .cornerRadius(4)
+                            }
+                        }
+                        .padding(.vertical, 4)
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Section 8: TestFlight & App Store Readiness Detail View
+    private var appStoreReadinessDetailView: some View {
+        List {
+            // Notice / Disclaimer Banner
+            Section {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "info.circle.fill")
+                            .foregroundColor(.blue)
+                        Text("Pre-Flight Submission Notice")
+                            .font(.caption)
+                            .bold()
+                            .foregroundColor(.primary)
+                    }
+                    Text(appStoreReadinessReport.serverSideDisclaimerNotice)
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
+                .padding(.vertical, 4)
+            }
+
+            Section(header: Text("Gate Status")) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(appStoreReadinessReport.gateStatus.rawValue)
+                            .font(.title3)
+                            .bold()
+                            .foregroundColor(appStoreReadinessReport.gateStatus == .readyForUpload ? .green : (appStoreReadinessReport.gateStatus == .cautionPendingReview ? .orange : .red))
+                        Text("\(appStoreReadinessReport.passedChecksCount)/\(appStoreReadinessReport.totalChecksCount) Pre-Flight Checks Passed (\(Int(appStoreReadinessReport.readinessScore))%)")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    Spacer()
+                    Image(systemName: appStoreReadinessReport.gateStatus == .readyForUpload ? "checkmark.circle.fill" : "exclamationmark.octagon.fill")
+                        .font(.system(size: 36))
+                        .foregroundColor(appStoreReadinessReport.gateStatus == .readyForUpload ? .green : .red)
+                }
+
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("App Version: \(appStoreReadinessReport.appVersion) (\(appStoreReadinessReport.buildNumber))")
+                            .font(.caption2)
+                        Text("Bundle ID: \(appStoreReadinessReport.bundleIdentifier)")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                        Text("Min Deployment Target: iOS \(appStoreReadinessReport.minimumOSVersion)")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
+                }
+            }
+
+            Section(header: Text("Pre-Submission Checklist (\(appStoreReadinessReport.checks.count))")) {
+                ForEach(appStoreReadinessReport.checks) { check in
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Image(systemName: check.isReady ? "checkmark.circle.fill" : "xmark.circle.fill")
+                                .foregroundColor(check.isReady ? .green : .red)
+                            Text(check.title)
+                                .font(.subheadline)
+                                .bold()
+                            Spacer()
+                            Text(check.category)
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                        }
+
+                        Text(check.detail)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+
+                        if !check.isReady {
+                            Text("💡 Action Required: \(check.advice)")
+                                .font(.caption2)
+                                .foregroundColor(.blue)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+            }
+        }
+    }
+
+    // MARK: - Section 9: Performance Detail View
+    private var performanceDetailView: some View {
+        List {
+            Section(header: Text("Hardware & Launch Telemetry")) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(performanceReport.healthGrade.rawValue)
+                            .font(.headline)
+                            .bold()
+                            .foregroundColor(performanceReport.healthGrade == .optimal ? .green : .orange)
+                        Text("Performance Score: \(Int(performanceReport.overallPerformanceScore))%")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    Spacer()
+                    Image(systemName: "speedometer")
+                        .font(.system(size: 32))
+                        .foregroundColor(performanceReport.healthGrade == .optimal ? .green : .orange)
+                }
+
+                HStack {
+                    VStack(alignment: .leading) {
+                        Text("Estimated Cold Launch:")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                        Text("\(String(format: "%.0f", performanceReport.coldLaunchEstimatedMs)) ms")
+                            .font(.headline)
+                            .foregroundColor(performanceReport.coldLaunchEstimatedMs < 1000 ? .green : .orange)
+                    }
+                    Spacer()
+                    VStack(alignment: .leading) {
+                        Text("Warm Launch:")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                        Text("\(String(format: "%.0f", performanceReport.warmLaunchEstimatedMs)) ms")
+                            .font(.headline)
+                            .foregroundColor(.blue)
+                    }
+                    Spacer()
+                    VStack(alignment: .leading) {
+                        Text("Main Hangs:")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                        Text("\(performanceReport.hangEventsCount)")
+                            .font(.headline)
+                            .foregroundColor(performanceReport.hangEventsCount == 0 ? .green : .red)
+                    }
+                }
+
+                HStack {
+                    VStack(alignment: .leading) {
+                        Text("Active Memory:")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                        Text("\(String(format: "%.1f", performanceReport.activeMemoryMB)) MB")
+                            .font(.subheadline)
+                            .bold()
+                    }
+                    Spacer()
+                    VStack(alignment: .leading) {
+                        Text("Peak Memory:")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                        Text("\(String(format: "%.1f", performanceReport.peakMemoryMB)) MB")
+                            .font(.subheadline)
+                            .bold()
+                    }
+                    Spacer()
+                    VStack(alignment: .leading) {
+                        Text("Thermal State:")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                        Text(performanceReport.thermalState)
+                            .font(.subheadline)
+                            .bold()
+                            .foregroundColor(.secondary)
+                    }
+                }
+            }
+
+            Section(header: Text("Optimization Notes & Guidelines")) {
+                ForEach(performanceReport.performanceNotes, id: \.self) { note in
+                    HStack(alignment: .top, spacing: 6) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundColor(.green)
+                            .font(.caption)
+                        Text(note)
+                            .font(.caption)
+                    }
+                    .padding(.vertical, 2)
+                }
+            }
+        }
+    }
+
+    // MARK: - Section 10: Accessibility Detail View
+    private var accessibilityDetailView: some View {
+        List {
+            Section(header: Text("VoiceOver & HIG Accessibility Score")) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("\(Int(accessibilityReport.scorePercentage))% Compliant")
+                            .font(.title2)
+                            .bold()
+                            .foregroundColor(accessibilityReport.scorePercentage >= 85 ? .green : .orange)
+                        Text("Active Locale: \(accessibilityReport.currentLocaleIdentifier) • VoiceOver: \(accessibilityReport.isVoiceOverRunning ? "Active" : "Idle")")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    Spacer()
+                    Image(systemName: "accessibility")
+                        .font(.system(size: 32))
+                        .foregroundColor(.teal)
+                }
+
+                HStack {
+                    Label("\(accessibilityReport.touchTargetIssuesCount) Touch (<44pt)", systemImage: "hand.tap.fill")
+                        .font(.caption)
+                        .foregroundColor(accessibilityReport.touchTargetIssuesCount == 0 ? .green : .red)
+                    Spacer()
+                    Label("\(accessibilityReport.missingLabelsCount) Missing Labels", systemImage: "text.bubble.fill")
+                        .font(.caption)
+                        .foregroundColor(accessibilityReport.missingLabelsCount == 0 ? .green : .orange)
+                    Spacer()
+                    Label("\(accessibilityReport.unlocalizedStringsCount) Hardcoded", systemImage: "globe")
+                        .font(.caption)
+                        .foregroundColor(accessibilityReport.unlocalizedStringsCount == 0 ? .green : .orange)
+                }
+            }
+
+            Section(header: Text("Accessibility Findings (\(accessibilityReport.findings.count))")) {
+                if accessibilityReport.findings.isEmpty {
+                    Text("✅ Perfect Accessibility! All touch targets >= 44x44pt, elements labeled, and strings localized.")
+                        .font(.caption)
+                        .foregroundColor(.green)
+                } else {
+                    ForEach(accessibilityReport.findings) { finding in
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack {
+                                Text(finding.kind.rawValue)
+                                    .font(.caption2)
+                                    .bold()
+                                    .foregroundColor(finding.kind == .smallTouchTarget ? .red : .orange)
+                                Spacer()
+                                Text(finding.screenName)
+                                    .font(.caption2)
+                                    .foregroundColor(.secondary)
+                            }
+
+                            Text(finding.title)
+                                .font(.subheadline)
+                                .bold()
+
+                            Text(finding.detail)
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+
+                            Text("💡 Recommended Fix: \(finding.recommendation)")
+                                .font(.caption2)
+                                .foregroundColor(.blue)
+                        }
+                        .padding(.vertical, 4)
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Section 11: AI Advisor View
     private var aiAdvisorDetailView: some View {
         List {
-            Section(header: Text("Smart AI Engineering Solutions")) {
+            Section(header: Text("100% Free Offline AI Engineering Solutions")) {
                 if defects.isEmpty {
                     VStack(spacing: 8) {
                         Image(systemName: "sparkles")
                             .font(.system(size: 36))
-                            .foregroundColor(.indigo)
+                            .foregroundColor(.purple)
                         Text("AI Engineering Engine Active")
                             .font(.headline)
-                        Text("No active defects detected. When any UI clipping, memory leak, or crash occurs, AI automatically synthesizes code patches and architectural recommendations.")
+                        Text("No active defects detected. When any UI clipping, memory leak, or crash occurs, AI automatically synthesizes code patches and architectural recommendations without paid APIs or network reliance.")
                             .font(.caption)
                             .foregroundColor(.secondary)
                             .multilineTextAlignment(.center)
@@ -793,17 +1390,17 @@ public struct InAppTestCenterView: View {
                     .padding()
                 } else {
                     ForEach(defects, id: \.id) { defect in
-                        let solution = AIEngineeringAdvisor().advise(for: defect)
+                        let solution = LocalIntelligenceEngine.shared.advise(for: defect)
                         VStack(alignment: .leading, spacing: 6) {
                             Text("🤖 Solution for: \(defect.title)")
                                 .font(.subheadline)
-                                .fontWeight(.bold)
-                                .foregroundColor(.indigo)
+                                .bold()
+                                .foregroundColor(.purple)
 
                             Text("Pattern: \(solution.recommendedDesignPattern)")
                                 .font(.caption2)
-                                .fontWeight(.semibold)
-                                .foregroundColor(.purple)
+                                .bold()
+                                .foregroundColor(.indigo)
 
                             Text("Analysis: \(solution.architecturalAnalysis)")
                                 .font(.caption)
@@ -822,8 +1419,7 @@ public struct InAppTestCenterView: View {
         }
     }
 
-    // MARK: - Section 7: Journeys View
-
+    // MARK: - Section 12: Journeys View
     private var journeysListView: some View {
         List {
             Section(header: Text("User Journeys (\(journeys.count))")) {
@@ -844,17 +1440,17 @@ public struct InAppTestCenterView: View {
         }
     }
 
-    // MARK: - Live Audit Action
-
-    private func runLiveAudit() {
+    // MARK: - Asynchronous Live Audit Action (Cached & Deduplicated)
+    private func runLiveAudit(forceRefresh: Bool = false) {
         #if canImport(UIKit) && !os(watchOS)
         withAnimation {
             self.isLoading = true
+            self.loadErrorMessage = nil
             self.loadingProgress = 0.15
             self.loadingStageMessage = "Please wait, we are fetching the report data..."
         }
 
-        // 1. Instant in-memory refresh (< 2ms)
+        // Instant in-memory refresh
         _ = LiveScreenAuditEngine.shared.auditActiveWindow()
         ScreenRegistry.shared.discoverRunningScreens()
 
@@ -863,57 +1459,51 @@ public struct InAppTestCenterView: View {
         self.defects = DefectCatalog.shared.allDefects
         self.runtimeEvents = RuntimeTelemetryStore.shared.allEvents
 
-        // 2. Heavy static disk scans executed asynchronously in the background
-        Task.detached(priority: .userInitiated) {
-            await MainActor.run {
-                self.loadingProgress = 0.35
-                self.loadingStageMessage = "Auditing Anti-Hacking & Security Shield..."
-            }
-            let antiHacking = SecurityAndAntiHackingAuditor().auditApplicationDefense()
-
-            await MainActor.run {
-                self.loadingProgress = 0.60
-                self.loadingStageMessage = "Analyzing Memory & Architectural Patterns..."
-            }
-            let arch = ArchitecturalAntiPatternAuditor().auditProject()
-
-            await MainActor.run {
-                self.loadingProgress = 0.85
-                self.loadingStageMessage = "Compiling Senior Engineering Quality Report..."
-            }
-            let senior = SeniorProjectAuditor().auditProject()
-
-            var audits: [String: ScreenSeniorQualityReport] = [:]
-            let inspector = SeniorScreenQualityInspector()
-            for screen in ScreenRegistry.shared.allScreens {
-                audits[screen.id] = inspector.inspect(
-                    screen: screen,
-                    projectFindings: arch.findings,
-                    securityFindings: []
-                )
-            }
-
-            await MainActor.run {
-                self.loadingProgress = 1.0
-                self.loadingStageMessage = "All Data Ready!"
-                self.antiHackingReport = antiHacking
-                self.architecturalReport = arch
-                self.seniorReport = senior
-                self.screenAudits = audits
-
-                // Short delay so the developer sees completion before smooth dismissal
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-                    withAnimation(.easeInOut(duration: 0.35)) {
-                        self.isLoading = false
+        Task {
+            do {
+                let payload = try await AuditExecutionEngine.shared.fetchAuditPayload(
+                    forceRefresh: forceRefresh
+                ) { progress, message in
+                    Task { @MainActor in
+                        self.loadingProgress = progress
+                        self.loadingStageMessage = message
                     }
+                }
+
+                await MainActor.run {
+                    self.loadingProgress = 1.0
+                    self.loadingStageMessage = "All Data Ready!"
+                    self.seniorReport = payload.seniorReport
+                    self.antiHackingReport = payload.antiHackingReport
+                    self.architecturalReport = payload.architecturalReport
+                    self.appleGuidelinesReport = payload.appleGuidelinesReport
+                    self.infoPlistReport = payload.infoPlistReport
+                    self.appStoreReadinessReport = payload.appStoreReadinessReport
+                    self.performanceReport = payload.performanceReport
+                    self.accessibilityReport = payload.accessibilityReport
+                    self.screenAudits = payload.screenAudits
+                    self.defects = payload.defects
+                    self.screens = payload.screens
+                    self.journeys = payload.journeys
+
+                    // Smooth transition to dashboard
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                        withAnimation(.easeInOut(duration: 0.3)) {
+                            self.isLoading = false
+                        }
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    self.loadErrorMessage = "Audit execution failed: \(error.localizedDescription)"
+                    self.isLoading = false
                 }
             }
         }
         #endif
     }
 
-    // MARK: - UI Helpers for Senior Developer Experience
-
+    // MARK: - UI Helpers & Filtering
     private func kpiCard(title: String, value: String, color: Color, icon: String) -> some View {
         VStack(spacing: 4) {
             Image(systemName: icon)
@@ -951,29 +1541,39 @@ public struct InAppTestCenterView: View {
         return text.lowercased().contains(searchQuery.lowercased())
     }
 
-    private func copyReportToClipboard() {
-        #if canImport(UIKit) && !os(watchOS)
-        let reportText = """
-        📋 iOS QA Test Center Report
-        -----------------------------
-        App: \(reportTitle) (v\(appVersion))
-        Bundle: \(bundleIdentifier)
-        Overall Quality: \(String(format: "%.1f", qualityScore))% (\(qualityGrade))
-        Active Issues: \(defects.count)
-        Screens Audited: \(screens.count)
-        Security Shield: \(antiHackingReport.grade) (\(antiHackingReport.isProtectedAgainstHackers ? "Protected" : "Vulnerable"))
-        Code Findings: \(architecturalReport.findings.count)
-        -----------------------------
-        """
-        UIPasteboard.general.string = reportText
+    private func copyToast(message: String) {
+        toastMessage = message
         withAnimation {
             showCopiedToast = true
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
             withAnimation {
                 showCopiedToast = false
             }
         }
+    }
+
+    private func copyReportToClipboard() {
+        #if canImport(UIKit) && !os(watchOS)
+        let reportText = """
+        📋 iOS QA Test Center Comprehensive Audit Report
+        ------------------------------------------------
+        App: \(reportTitle) (v\(appVersion))
+        Bundle: \(bundleIdentifier)
+        Overall Quality: \(String(format: "%.1f", qualityScore))% (\(qualityGrade))
+        Active Bugs: \(defects.count)
+        Screens Audited: \(screens.count)
+        Security Shield: \(antiHackingReport.grade) (\(antiHackingReport.isProtectedAgainstHackers ? "Protected" : "Vulnerable"))
+        Apple Guidelines: \(Int(appleGuidelinesReport.scorePercentage))% Compliant (\(appleGuidelinesReport.confirmedViolationsCount) Violations)
+        Info.plist Validation: \(Int(infoPlistReport.overallScore))% Valid (\(infoPlistReport.findings.count) Findings)
+        TestFlight Readiness: \(appStoreReadinessReport.gateStatus.rawValue) (\(appStoreReadinessReport.passedChecksCount)/\(appStoreReadinessReport.totalChecksCount) Passed)
+        Estimated Cold Launch: \(String(format: "%.0f", performanceReport.coldLaunchEstimatedMs)) ms
+        Accessibility: \(Int(accessibilityReport.scorePercentage))% Compliant
+        Code Hygiene Findings: \(architecturalReport.findings.count)
+        ------------------------------------------------
+        """
+        UIPasteboard.general.string = reportText
+        copyToast(message: "QA Report Summary Copied! 📋")
         #endif
     }
 
@@ -1008,7 +1608,7 @@ public struct DefectDetailSheetView: View {
     }
 
     public var body: some View {
-        let ai = AIEngineeringAdvisor().advise(for: defect)
+        let ai = LocalIntelligenceEngine.shared.advise(for: defect)
 
         NavigationView {
             List {
@@ -1019,7 +1619,7 @@ public struct DefectDetailSheetView: View {
                     HStack {
                         Text("Severity: \(defect.severity.rawValue)")
                             .font(.caption)
-                            .fontWeight(.bold)
+                            .bold()
                             .foregroundColor(.red)
                         Spacer()
                         Text("Category: \(defect.category.rawValue)")
@@ -1045,10 +1645,10 @@ public struct DefectDetailSheetView: View {
                     }
                 }
 
-                Section(header: Text("🤖 AI Smart Patch Solution")) {
+                Section(header: Text("🤖 Free AI Smart Patch Solution")) {
                     Text("Design Pattern: \(ai.recommendedDesignPattern)")
                         .font(.caption)
-                        .fontWeight(.bold)
+                        .bold()
                         .foregroundColor(.purple)
 
                     Text(ai.copyPasteSolution)
@@ -1095,7 +1695,7 @@ public struct ScreenDetailSheetView: View {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(screen.name)
                                     .font(.title2)
-                                    .fontWeight(.bold)
+                                    .bold()
                                 Text("Class: \(audit.viewClassName) • Route: \(screen.route)")
                                     .font(.caption)
                                     .foregroundColor(.secondary)
@@ -1104,7 +1704,7 @@ public struct ScreenDetailSheetView: View {
                             VStack(alignment: .trailing, spacing: 2) {
                                 Text("\(String(format: "%.1f", audit.overallScore))%")
                                     .font(.title)
-                                    .fontWeight(.bold)
+                                    .bold()
                                     .foregroundColor(audit.overallScore >= 90 ? .green : .orange)
                                 Text(audit.overallGrade)
                                     .font(.caption2)
@@ -1125,7 +1725,7 @@ public struct ScreenDetailSheetView: View {
                 Section(header: HStack {
                     Text("🛡️ Security & Privacy Analysis")
                     Spacer()
-                    Text("\(Int(audit.securityScore))%").foregroundColor(.green).fontWeight(.bold)
+                    Text("\(Int(audit.securityScore))%").foregroundColor(.green).bold()
                 }) {
                     ForEach(audit.securityChecks) { item in
                         checkItemRow(item: item)
@@ -1141,7 +1741,7 @@ public struct ScreenDetailSheetView: View {
                 Section(header: HStack {
                     Text("🧠 Memory Leakage & Retain Cycles")
                     Spacer()
-                    Text("\(Int(audit.memoryScore))%").foregroundColor(.purple).fontWeight(.bold)
+                    Text("\(Int(audit.memoryScore))%").foregroundColor(.purple).bold()
                 }) {
                     ForEach(audit.memoryChecks) { item in
                         checkItemRow(item: item)
@@ -1157,7 +1757,7 @@ public struct ScreenDetailSheetView: View {
                 Section(header: HStack {
                     Text("⚠️ Error Handling & Force-Unwrap Audit")
                     Spacer()
-                    Text("\(Int(audit.errorHandlingScore))%").foregroundColor(.orange).fontWeight(.bold)
+                    Text("\(Int(audit.errorHandlingScore))%").foregroundColor(.orange).bold()
                 }) {
                     ForEach(audit.errorHandlingChecks) { item in
                         checkItemRow(item: item)
@@ -1173,7 +1773,7 @@ public struct ScreenDetailSheetView: View {
                 Section(header: HStack {
                     Text("⚡ Thread Safety & Layout Engine Concurrency")
                     Spacer()
-                    Text("\(Int(audit.concurrencyScore))%").foregroundColor(.blue).fontWeight(.bold)
+                    Text("\(Int(audit.concurrencyScore))%").foregroundColor(.blue).bold()
                 }) {
                     ForEach(audit.concurrencyChecks) { item in
                         checkItemRow(item: item)
@@ -1185,11 +1785,11 @@ public struct ScreenDetailSheetView: View {
                     }
                 }
 
-                // 5. Senior Developer Unit Test Suite (7 Complete Tests)
+                // 5. Senior Developer Unit Test Suite
                 Section(header: HStack {
                     Text("🧪 Unit Test Suite (\(audit.unitTestCases.count) Tests)")
                     Spacer()
-                    Text("Coverage: \(Int(audit.unitTestCoverageScore))%").foregroundColor(.green).fontWeight(.bold)
+                    Text("Coverage: \(Int(audit.unitTestCoverageScore))%").foregroundColor(.green).bold()
                 }) {
                     ForEach(audit.unitTestCases) { testCase in
                         VStack(alignment: .leading, spacing: 6) {
@@ -1197,7 +1797,7 @@ public struct ScreenDetailSheetView: View {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(testCase.functionName)
                                         .font(.system(.caption, design: .monospaced))
-                                        .fontWeight(.bold)
+                                        .bold()
                                     Text("Category: \(testCase.category)")
                                         .font(.caption2)
                                         .foregroundColor(.secondary)
@@ -1205,7 +1805,7 @@ public struct ScreenDetailSheetView: View {
                                 Spacer()
                                 Text(testCase.status.rawValue)
                                     .font(.caption2)
-                                    .fontWeight(.bold)
+                                    .bold()
                                     .padding(.horizontal, 6)
                                     .padding(.vertical, 2)
                                     .background(testCase.status == .passed ? Color.green.opacity(0.15) : Color.red.opacity(0.15))
@@ -1217,7 +1817,6 @@ public struct ScreenDetailSheetView: View {
                                 .font(.caption)
                                 .foregroundColor(.primary)
 
-                            // Expandable XCTest code snippet
                             Button(action: {
                                 if expandedTestId == testCase.id {
                                     expandedTestId = nil
@@ -1267,7 +1866,7 @@ public struct ScreenDetailSheetView: View {
                     } else {
                         ForEach(screen.elements, id: \.id) { el in
                             HStack {
-                                Text(el.id).font(.caption).fontWeight(.medium)
+                                Text(el.id).font(.caption)
                                 Spacer()
                                 Text(el.type.rawValue).font(.caption2).foregroundColor(.secondary)
                             }
@@ -1305,7 +1904,7 @@ public struct ScreenDetailSheetView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(item.name)
                     .font(.caption)
-                    .fontWeight(.semibold)
+                    .bold()
                 Text(item.details)
                     .font(.caption2)
                     .foregroundColor(.secondary)
@@ -1319,4 +1918,3 @@ public struct ScreenDetailSheetView: View {
         .padding(.vertical, 2)
     }
 }
-

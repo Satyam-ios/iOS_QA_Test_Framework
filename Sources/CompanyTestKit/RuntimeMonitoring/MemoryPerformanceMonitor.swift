@@ -116,6 +116,10 @@ public final class MemoryPerformanceMonitor: @unchecked Sendable {
         return memoryBytes
     }
 
+    public var currentMemoryUsageMegabytes: Double {
+        Double(currentResidentMemoryBytes()) / (1024.0 * 1024.0)
+    }
+
     public var peakMemoryMegabytes: Double {
         lock.lock()
         defer { lock.unlock() }

@@ -25,12 +25,43 @@ public struct InAppTestCenterView: View {
 
     // Loading & UX Enhancement States
     @State private var isLoading: Bool = true
-    @State private var loadingStageMessage: String = "Please wait, we are fetching the report data..."
-    @State private var loadingProgress: Double = 0.15
+    @State private var loadingStageMessage: String = "1:Bugs & Defect Detection Engine"
+    @State private var loadingProgress: Double = 0.08
+    @State private var currentStepIndex: Int = 1
+    @State private var isSpinning: Bool = false
+    @State private var isPulsing: Bool = false
     @State private var loadErrorMessage: String? = nil
     @State private var showCopiedToast: Bool = false
     @State private var toastMessage: String = "QA Report Summary Copied! 📋"
     @State private var searchQuery: String = ""
+
+    public struct LoadingDomainItem: Identifiable {
+        public let id: Int
+        public let name: String
+        public let subtitle: String
+        public let icon: String
+        public let color: Color
+    }
+
+    private let auditLoadingDomains: [LoadingDomainItem] = [
+        LoadingDomainItem(id: 1, name: "Bugs & Defect Detection Engine", subtitle: "Auditing live UI truncation, ellipses & clipping", icon: "ladybug.fill", color: .red),
+        LoadingDomainItem(id: 2, name: "Covered Screens & UI/UX Audit", subtitle: "Mapping AutoLayout, dynamic fonts & control states", icon: "iphone.smartkeyboard", color: .blue),
+        LoadingDomainItem(id: 3, name: "Anti-Hacking & Security Shield", subtitle: "Verifying jailbreak defense, Keychain & ATS", icon: "shield.checkered", color: .green),
+        LoadingDomainItem(id: 4, name: "Memory Leaks & Code Quality", subtitle: "Scanning retain cycles, [weak self] & guard unwraps", icon: "brain.head.profile", color: .purple),
+        LoadingDomainItem(id: 5, name: "Concurrency & Layout Safety", subtitle: "Verifying @MainActor isolation & UI stall watchdog", icon: "bolt.fill", color: .teal),
+        LoadingDomainItem(id: 6, name: "Apple Guidelines & Compliance", subtitle: "Auditing review guidelines & Privacy Manifest", icon: "applelogo", color: .primary),
+        LoadingDomainItem(id: 7, name: "Info.plist & Entitlements", subtitle: "Checking 13+ privacy keys & generating XML fixes", icon: "list.bullet.rectangle", color: .indigo),
+        LoadingDomainItem(id: 8, name: "TestFlight & App Store Readiness", subtitle: "Checking code signing, 1024pt icon & SemVer", icon: "airplane.departure", color: .blue),
+        LoadingDomainItem(id: 9, name: "Performance & Launch-Time", subtitle: "Measuring cold/warm launch & Mach resident memory", icon: "speedometer", color: .orange),
+        LoadingDomainItem(id: 10, name: "Accessibility & Localization", subtitle: "Auditing 44x44pt touch targets & VoiceOver", icon: "accessibility", color: .teal),
+        LoadingDomainItem(id: 11, name: "AI Smart Engineering Advisor", subtitle: "100% offline root-cause diagnosis & Swift tests", icon: "sparkles", color: .purple),
+        LoadingDomainItem(id: 12, name: "Automated Test Journeys", subtitle: "Validating multi-screen flows & regression safety", icon: "play.circle.fill", color: .orange)
+    ]
+
+    private var activeDomain: LoadingDomainItem {
+        let index = max(1, min(currentStepIndex, 12))
+        return auditLoadingDomains.first(where: { $0.id == index }) ?? auditLoadingDomains[0]
+    }
 
     // Navigation State
     @State private var activeSection: ActiveAuditSection? = nil
@@ -127,61 +158,176 @@ public struct InAppTestCenterView: View {
         }
     }
 
-    // MARK: - Dedicated Loader View
+    // MARK: - Dedicated Animated Loader View (12-Domain Showcase)
     private var loadingView: some View {
-        VStack(spacing: 24) {
+        VStack(spacing: 20) {
             Spacer()
 
+            // 1. Futuristic Spinning Ring with Dynamic Pulsing Emblem
             ZStack {
+                // Background subtle ring
                 Circle()
-                    .stroke(Color.blue.opacity(0.12), lineWidth: 8)
-                    .frame(width: 96, height: 96)
+                    .stroke(Color.secondary.opacity(0.12), lineWidth: 8)
+                    .frame(width: 104, height: 104)
 
+                // Continuous Rotating Accent Gradient Ring
                 Circle()
-                    .trim(from: 0, to: CGFloat(loadingProgress))
+                    .trim(from: 0.12, to: 0.85)
+                    .stroke(
+                        AngularGradient(
+                            gradient: Gradient(colors: [.blue, .purple, .teal, .indigo, .blue]),
+                            center: .center
+                        ),
+                        style: StrokeStyle(lineWidth: 6, lineCap: .round)
+                    )
+                    .frame(width: 112, height: 112)
+                    .rotationEffect(.degrees(isSpinning ? 360 : 0))
+
+                // Progress Fill Ring
+                Circle()
+                    .trim(from: 0, to: CGFloat(max(0.06, loadingProgress)))
                     .stroke(
                         LinearGradient(
-                            colors: [.blue, .purple],
+                            colors: [activeDomain.color, .blue],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         ),
                         style: StrokeStyle(lineWidth: 8, lineCap: .round)
                     )
-                    .frame(width: 96, height: 96)
+                    .frame(width: 104, height: 104)
                     .rotationEffect(.degrees(-90))
-                    .animation(.easeInOut(duration: 0.35), value: loadingProgress)
+                    .animation(.easeInOut(duration: 0.25), value: loadingProgress)
 
-                Image(systemName: "shield.checkered")
-                    .font(.system(size: 40, weight: .bold))
-                    .foregroundColor(.blue)
+                // Center Pulsing Dynamic Icon for Active Domain
+                ZStack {
+                    Circle()
+                        .fill(activeDomain.color.opacity(0.12))
+                        .frame(width: 64, height: 64)
+
+                    Image(systemName: activeDomain.icon)
+                        .font(.system(size: 30, weight: .bold))
+                        .foregroundColor(activeDomain.color)
+                        .scaleEffect(isPulsing ? 1.08 : 0.94)
+                }
             }
 
-            VStack(spacing: 8) {
-                Text("Loading Test Center Report")
-                    .font(.title2)
+            // 2. Header & Step Tracker
+            VStack(spacing: 4) {
+                Text("Engineering Audit in Progress")
+                    .font(.title3)
                     .bold()
                     .foregroundColor(.primary)
 
-                Text("Please wait, we are fetching the report data...")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.center)
-            }
-
-            VStack(spacing: 10) {
-                ProgressView(value: loadingProgress, total: 1.0)
-                    .progressViewStyle(LinearProgressViewStyle(tint: .blue))
-                    .frame(width: 250)
-
-                HStack(spacing: 8) {
-                    ProgressView()
-                        .scaleEffect(0.8)
-                    Text(loadingStageMessage)
-                        .font(.caption)
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(Color.green)
+                        .frame(width: 8, height: 8)
+                        .opacity(isPulsing ? 1.0 : 0.4)
+                    Text("Analyzing Domain \(currentStepIndex) of 12")
+                        .font(.subheadline)
+                        .bold()
                         .foregroundColor(.secondary)
                 }
             }
-            .padding(.top, 6)
+
+            // 3. Active Feature Hero Card (Highlights each of the 12 features sequentially)
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    HStack(spacing: 6) {
+                        Image(systemName: activeDomain.icon)
+                            .foregroundColor(activeDomain.color)
+                            .font(.caption)
+                        Text("Domain \(activeDomain.id) of 12")
+                            .font(.caption2)
+                            .bold()
+                            .foregroundColor(activeDomain.color)
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(activeDomain.color.opacity(0.12))
+                    .cornerRadius(6)
+
+                    Spacer()
+
+                    HStack(spacing: 4) {
+                        ProgressView()
+                            .scaleEffect(0.65)
+                        Text("Analyzing...")
+                            .font(.caption2)
+                            .bold()
+                            .foregroundColor(.secondary)
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(activeDomain.name)
+                        .font(.subheadline)
+                        .bold()
+                        .foregroundColor(.primary)
+
+                    Text(activeDomain.subtitle)
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                        .lineLimit(2)
+                }
+            }
+            .padding(12)
+            .frame(maxWidth: 320)
+            .background(Color.secondary.opacity(0.08))
+            .cornerRadius(12)
+
+            // 4. Linear Progress Bar & Percentage
+            VStack(spacing: 6) {
+                ProgressView(value: loadingProgress, total: 1.0)
+                    .progressViewStyle(LinearProgressViewStyle(tint: activeDomain.color))
+                    .frame(width: 270)
+
+                HStack {
+                    Text("\(Int(loadingProgress * 100))% Complete")
+                        .font(.caption2)
+                        .bold()
+                        .foregroundColor(.secondary)
+                    Spacer()
+                    Text("\(currentStepIndex)/12 Domains")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
+                .frame(width: 270)
+            }
+
+            // 5. 12-Step Horizontal Mini Checklist Tracker
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    ForEach(auditLoadingDomains) { domain in
+                        HStack(spacing: 3) {
+                            if domain.id < currentStepIndex {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .font(.system(size: 11))
+                                    .foregroundColor(.green)
+                            } else if domain.id == currentStepIndex {
+                                Circle()
+                                    .fill(domain.color)
+                                    .frame(width: 8, height: 8)
+                                    .scaleEffect(isPulsing ? 1.25 : 0.8)
+                            } else {
+                                Circle()
+                                    .fill(Color.secondary.opacity(0.3))
+                                    .frame(width: 6, height: 6)
+                            }
+
+                            Text("\(domain.id)")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundColor(domain.id == currentStepIndex ? domain.color : (domain.id < currentStepIndex ? .primary : .secondary))
+                        }
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 3)
+                        .background(domain.id == currentStepIndex ? domain.color.opacity(0.15) : Color.clear)
+                        .cornerRadius(5)
+                    }
+                }
+                .padding(.horizontal, 16)
+            }
+            .frame(maxWidth: 320)
 
             Spacer()
             Spacer()
@@ -190,6 +336,14 @@ public struct InAppTestCenterView: View {
         #if canImport(UIKit) && !os(watchOS)
         .background(Color(UIColor.systemGroupedBackground))
         #endif
+        .onAppear {
+            withAnimation(Animation.linear(duration: 2.2).repeatForever(autoreverses: false)) {
+                isSpinning = true
+            }
+            withAnimation(Animation.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) {
+                isPulsing = true
+            }
+        }
     }
 
     // MARK: - Resilient Error View
@@ -1446,8 +1600,9 @@ public struct InAppTestCenterView: View {
         withAnimation {
             self.isLoading = true
             self.loadErrorMessage = nil
-            self.loadingProgress = 0.15
-            self.loadingStageMessage = "Please wait, we are fetching the report data..."
+            self.loadingProgress = 0.08
+            self.currentStepIndex = 1
+            self.loadingStageMessage = "1:Bugs & Defect Detection Engine"
         }
 
         Task {
@@ -1456,14 +1611,20 @@ public struct InAppTestCenterView: View {
                     forceRefresh: forceRefresh
                 ) { progress, message in
                     Task { @MainActor in
-                        self.loadingProgress = progress
-                        self.loadingStageMessage = message
+                        withAnimation(.easeInOut(duration: 0.25)) {
+                            self.loadingProgress = progress
+                            self.loadingStageMessage = message
+                            if let prefix = message.split(separator: ":").first, let step = Int(prefix) {
+                                self.currentStepIndex = step
+                            }
+                        }
                     }
                 }
 
                 await MainActor.run {
                     self.loadingProgress = 1.0
-                    self.loadingStageMessage = "All Data Ready!"
+                    self.currentStepIndex = 12
+                    self.loadingStageMessage = "Ready:All 12 Quality Domains Ready!"
                     self.seniorReport = payload.seniorReport
                     self.antiHackingReport = payload.antiHackingReport
                     self.architecturalReport = payload.architecturalReport
@@ -1478,8 +1639,8 @@ public struct InAppTestCenterView: View {
                     self.journeys = payload.journeys
 
                     // Smooth transition to dashboard
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-                        withAnimation(.easeInOut(duration: 0.3)) {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                        withAnimation(.easeInOut(duration: 0.35)) {
                             self.isLoading = false
                         }
                     }

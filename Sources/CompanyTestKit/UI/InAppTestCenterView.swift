@@ -1450,15 +1450,6 @@ public struct InAppTestCenterView: View {
             self.loadingStageMessage = "Please wait, we are fetching the report data..."
         }
 
-        // Instant in-memory refresh
-        _ = LiveScreenAuditEngine.shared.auditActiveWindow()
-        ScreenRegistry.shared.discoverRunningScreens()
-
-        self.screens = ScreenRegistry.shared.allScreens
-        self.journeys = ScreenRegistry.shared.allJourneys
-        self.defects = DefectCatalog.shared.allDefects
-        self.runtimeEvents = RuntimeTelemetryStore.shared.allEvents
-
         Task {
             do {
                 let payload = try await AuditExecutionEngine.shared.fetchAuditPayload(
